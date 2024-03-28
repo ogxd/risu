@@ -1,8 +1,11 @@
+mod arena_linked_list;
+
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};
 use hyper::http::Uri;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use arena_linked_list::ArenaLinkedList;
 
 pub async fn start() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
