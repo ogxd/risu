@@ -7,9 +7,12 @@ edition = "2021"
 name = "risu"
 path = "src/main.rs"
 
-[[bin]]
-name = "demo"
-path = "src/demo/main.rs"
+[lib]
+name = "risu"
+
+[[test]]
+name = "tests"
+path = "tests/tests.rs"
 
 [dependencies]
 tonic = "0.11"
