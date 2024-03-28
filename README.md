@@ -10,7 +10,7 @@ grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}
 
 ## Todo
 
-- [ ] Setup a way to test risu against various targets
+- [x] Setup a way to test risu against various targets
 - [ ] Support HTTP/1.1
 - [ ] Support HTTP/2
 - [ ] Support https
@@ -18,6 +18,7 @@ grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}
 - [ ] Expose prometheus metrics
 - [ ] Setup and run benchmarks
 - [ ] Setup CI
+- [ ] Implement arena linked list
 - [ ] Implement LRU cache
 - [ ] Implement probatory LRU cache
 - [ ] Implemented in-memory sharding
