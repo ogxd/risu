@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Risu", "Risu\Risu.csproj", "{E7155549-4B25-4426-97E2-841699C9D429}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Risu.Demo.GrpcService", "Risu.Demo.GrpcService\Risu.Demo.GrpcService.csproj", "{41407244-D6F6-4F3A-BA1D-2D0563261498}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E7155549-4B25-4426-97E2-841699C9D429}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7155549-4B25-4426-97E2-841699C9D429}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7155549-4B25-4426-97E2-841699C9D429}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7155549-4B25-4426-97E2-841699C9D429}.Release|Any CPU.Build.0 = Release|Any CPU
+		{41407244-D6F6-4F3A-BA1D-2D0563261498}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{41407244-D6F6-4F3A-BA1D-2D0563261498}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{41407244-D6F6-4F3A-BA1D-2D0563261498}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{41407244-D6F6-4F3A-BA1D-2D0563261498}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

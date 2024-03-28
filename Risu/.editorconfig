@@ -1,0 +1,47 @@
+# DO NOT UPDATE THIS FILE MANUALLY
+# This file is maintained and update through https://gitlab.com/smartadserver/rnd/netanalyzers-config
+
+# EditorConfig is awesome: https://EditorConfig.org
+# Based on https://github.com/dotnet/runtime/blob/main/.editorconfig
+
+# top-most EditorConfig file
+root = true
+
+# Unix-style newlines with a newline ending every file
+[*]
+indent_size = 4
+indent_style = space
+tab_width = 4
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Xml project files
+[*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,nativeproj,locproj}]
+indent_size = 2
+
+[*.{csproj,vbproj,proj,nativeproj,locproj}]
+charset = utf-8
+
+# Xml build files
+[*.builds]
+indent_size = 2
+
+# Xml files
+[*.{xml,stylecop,resx,ruleset}]
+indent_size = 2
+
+# Xml config files
+[*.{props,targets,config,nuspec}]
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+end_of_line = lf
+[*.{cmd,bat}]
+end_of_line = crlf
+
+# YAML config files
+[*.{yml,yaml}]
+indent_size = 2
+quote_type = single

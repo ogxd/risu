@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "dgSpecHash": "tc07Ph/d81VtfRyek8qpZwiF7CLvZbBAaDMXfTA5Dtxq5VlfzxQCQfYPb6RSiPyBbVhfMNGwLBLpyoUKZxLvJQ==",
+  "success": true,
+  "projectFilePath": "/Users/olivierginiaux/src/equativ/Equativ.TensorFlowServing.DistributedCache/Risu/Risu/Risu.csproj",
+  "expectedPackageFiles": [
+    "/Users/olivierginiaux/.nuget/packages/equativ.netanalyzers.config/3.5.3/equativ.netanalyzers.config.3.5.3.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/microsoft.aspnetcore.openapi/8.0.0/microsoft.aspnetcore.openapi.8.0.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/microsoft.extensions.apidescription.server/6.0.5/microsoft.extensions.apidescription.server.6.0.5.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/microsoft.openapi/1.4.3/microsoft.openapi.1.4.3.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/swashbuckle.aspnetcore/6.4.0/swashbuckle.aspnetcore.6.4.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/swashbuckle.aspnetcore.swagger/6.4.0/swashbuckle.aspnetcore.swagger.6.4.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/swashbuckle.aspnetcore.swaggergen/6.4.0/swashbuckle.aspnetcore.swaggergen.6.4.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/swashbuckle.aspnetcore.swaggerui/6.4.0/swashbuckle.aspnetcore.swaggerui.6.4.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/system.io.hashing/7.0.0/system.io.hashing.7.0.0.nupkg.sha512",
+    "/Users/olivierginiaux/.nuget/packages/yarp.reverseproxy/2.1.0/yarp.reverseproxy.2.1.0.nupkg.sha512"
+  ],
+  "logs": []
+}
