@@ -14,7 +14,7 @@ pub struct LruCache<K, H, V> {
     map:HashMap<H, LruCacheEntry<V>>,
     expiration: Duration,
     expiration_type: ExpirationType,
-    factory: dyn Fn(&K) -> H,
+    factory: Box<dyn Fn(&K) -> H>,
 }
 
 pub struct LruCacheEntry<V> {
@@ -27,6 +27,16 @@ impl<K, H, V> LruCache<K, H, V>
 where
     H: Eq + std::hash::Hash + Clone,
 {
+    pub fn new(factory: Box<dyn Fn(&K) -> H>) -> Self {
+        Self {
+            lru_list: ArenaLinkedList::new_with_capacity(4),
+            map: HashMap::new(),
+            expiration: Duration::from_secs(60),
+            expiration_type: ExpirationType::Absolute,
+            factory: factory
+        }
+    }
+
     pub fn try_add(&mut self, key: K, value: V) -> bool {
         let key = (self.factory)(&key);
         let mut added = false;
@@ -47,7 +57,7 @@ where
         return added;
     }
 
-    pub fn try_get(&mut self, key: &H) -> Option<&V> {
+    pub fn try_get(&mut self, key: &H) -> Option<V> {
         // If found in the map, remove from the lru list and reinsert at the end
         let lru_list = &mut self.lru_list;
 
@@ -67,14 +77,27 @@ where
                     // Move to the end of the list
                     lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
                     entry.get_mut().node_index = lru_list.add_last(key.clone()).unwrap();
-        
-                    let value_ref = &entry.get().value;
-                    Some(value_ref) // ERROR: cannot return value referencing local variable `entry`
+
+                    Some(entry.remove().value) // ERROR: cannot return value referencing local variable `entry`
                 }
             },
             Entry::Vacant(_) => {
                 None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_arena_linked_list() {
+        let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
+        assert!(lru.try_get(&1).is_none());
+        assert!(lru.try_add(1, "hello"));
+        assert!(!lru.try_add(1, "hello"));
+        assert!(lru.try_get(&1).is_some());
     }
 }
