@@ -16,9 +16,9 @@ grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}
 - [ ] Support https
 - [ ] Properly route
 - [ ] Expose prometheus metrics
-- [ ] Setup and run benchmarks
+- [x] Setup and run benchmarks
 - [ ] Setup CI
-- [ ] Implement arena linked list
+- [x] Implement arena linked list
 - [ ] Implement LRU cache
 - [ ] Implement probatory LRU cache
 - [ ] Implemented in-memory sharding
