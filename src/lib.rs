@@ -1,5 +1,7 @@
 mod arena_linked_list;
+mod lru;
 
+pub use lru::LruCache;
 pub use arena_linked_list::ArenaLinkedList;
 
 use hyper::service::{make_service_fn, service_fn};
