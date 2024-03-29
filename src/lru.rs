@@ -1,7 +1,6 @@
 use crate::ArenaLinkedList;
-use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 #[derive(PartialEq)]
@@ -10,15 +9,9 @@ enum ExpirationType {
     Sliding
 }
 
-pub struct LruCacheData<H, V> {
-    lru_list: ArenaLinkedList<H>,
-    map: HashMap<H, LruCacheEntry<V>>,
-}
-
-
 pub struct LruCache<K, H, V> {
-    lru_list: Arc<Mutex<ArenaLinkedList<H>>>,
-    map: Arc<Mutex<HashMap<H, LruCacheEntry<V>>>>,
+    lru_list: ArenaLinkedList<H>,
+    map:HashMap<H, LruCacheEntry<V>>,
     expiration: Duration,
     expiration_type: ExpirationType,
     factory: dyn Fn(&K) -> H,
@@ -34,31 +27,54 @@ impl<K, H, V> LruCache<K, H, V>
 where
     H: Eq + std::hash::Hash + Clone,
 {
-    pub fn try_get(&self, key: &H) -> Option<&V> {
+    pub fn try_add(&mut self, key: K, value: V) -> bool {
+        let key = (self.factory)(&key);
+        let mut added = false;
+
+        self.map.entry(key).or_insert_with_key(|k| {
+            added = true;
+            LruCacheEntry {
+                node_index: self.lru_list.add_last(k.clone()).unwrap(),
+                insertion: Instant::now(),
+                value,
+            }
+        });
+
+        if added {
+            // Release space
+        }
+
+        return added;
+    }
+
+    pub fn try_get(&mut self, key: &H) -> Option<&V> {
         // If found in the map, remove from the lru list and reinsert at the end
-        let mut lru_list = self.lru_list.lock().unwrap();
-        let mut map = self.map.lock().unwrap();
+        let lru_list = &mut self.lru_list;
 
-        if let Some(entry) = map.get_mut(key) {
-            if Instant::now() - entry.insertion > self.expiration {
-                // Entry has expired, we remove it and pretend it's not in the cache
-                // todo
-                return None;
+        match self.map.entry(key.clone()) {
+            Entry::Occupied(mut entry) => {
+                if Instant::now() - entry.get().insertion > self.expiration {
+                    // Entry has expired, we remove it and pretend it's not in the cache
+                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
+                    entry.remove_entry();
+                    None
+                } else {
+                    if self.expiration_type == ExpirationType::Sliding {
+                        // Refresh duration
+                        entry.get_mut().insertion = Instant::now();
+                    }
+        
+                    // Move to the end of the list
+                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
+                    entry.get_mut().node_index = lru_list.add_last(key.clone()).unwrap();
+        
+                    let value_ref = &entry.get().value;
+                    Some(value_ref) // ERROR: cannot return value referencing local variable `entry`
+                }
+            },
+            Entry::Vacant(_) => {
+                None
             }
-
-            if self.expiration_type == ExpirationType::Sliding {
-                // Refresh duration
-                entry.insertion = Instant::now();
-            }
-
-            // Move to the end of the list
-            lru_list.remove(entry.node_index);
-            entry.node_index = lru_list.add_last(key.clone()).unwrap();
-
-            None
-            //Some(&entry.value) // cannot return value referencing local variable `map` returns a value referencing data owned by the current function
-        } else {
-            None
         }
     }
 }
