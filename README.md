@@ -19,9 +19,10 @@ grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}
 - [x] Setup and run benchmarks
 - [ ] Setup CI
 - [x] Implement arena linked list
-- [ ] Implement LRU cache
+- [x] Implement LRU cache
 - [ ] Implement probatory LRU cache
 - [ ] Implemented in-memory sharding
 - [ ] Design hot keys cluster sharing
 - [ ] Find out how risu will know service to reach
 - [ ] Find out how to configure service
+- [ ] Experiment with bytedance/monoio
