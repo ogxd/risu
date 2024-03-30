@@ -259,6 +259,14 @@ impl<T> ArenaLinkedListNode<T> {
             value: None
         }
     }
+
+    pub fn get_after_index(&self) -> usize {
+        self.after_index
+    }
+
+    pub fn get_value(&self) -> &Option<T> {
+        &self.value
+    }
 }
 
 #[cfg(test)]

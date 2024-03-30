@@ -11,9 +11,10 @@ enum ExpirationType {
 
 pub struct LruCache<K, H, V> {
     lru_list: ArenaLinkedList<H>,
-    map:HashMap<H, LruCacheEntry<V>>,
+    map: HashMap<H, LruCacheEntry<V>>,
     expiration: Duration,
     expiration_type: ExpirationType,
+    max_size: usize,
     factory: Box<dyn Fn(&K) -> H>,
 }
 
@@ -33,6 +34,7 @@ where
             map: HashMap::new(),
             expiration: Duration::from_secs(60),
             expiration_type: ExpirationType::Absolute,
+            max_size: 4,
             factory: factory
         }
     }
@@ -51,10 +53,23 @@ where
         });
 
         if added {
-            // Release space
+            self.trim();
         }
 
         return added;
+    }
+
+    fn trim(&mut self) {
+        let mut index = self.lru_list.get_first_index().unwrap_or(usize::MAX);
+        while index != usize::MAX {
+            let node = self.lru_list.get(index).unwrap();
+            let key = node.get_value().as_ref().unwrap();
+            let entry = self.map.get(&key).unwrap();
+            if Instant::now() - entry.insertion > self.expiration {
+                self.map.remove(&key);
+            }
+            index = node.get_after_index();
+        }
     }
 
     pub fn try_get(&mut self, key: &H) -> Option<V> {
@@ -93,11 +108,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_arena_linked_list() {
+    fn basic() {
         let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
         assert!(lru.try_get(&1).is_none());
         assert!(lru.try_add(1, "hello"));
         assert!(!lru.try_add(1, "hello"));
         assert!(lru.try_get(&1).is_some());
+    }
+
+    #[test]
+    fn lru_trim() {
+        let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
+        assert!(lru.try_add(1, "h"));
+        assert!(lru.try_add(2, "e"));
+        assert!(lru.try_add(3, "l"));
+        assert!(lru.try_add(4, "l"));
+        assert!(lru.try_get(&1).is_some());
+        // Max size is reached, next insertion should evict oldest entry, which is 1
+        assert!(lru.try_add(5, "o"));
+        assert!(lru.try_get(&1).is_none());
     }
 }
