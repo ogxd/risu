@@ -1,11 +1,11 @@
 use crate::ArenaLinkedList;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[allow(dead_code)]
-pub struct LruCache<K, V>
-{
+pub struct LruCache<K, V> {
     lru_list: ArenaLinkedList<K>,
     map: HashMap<K, LruCacheEntry<V>>,
     expiration: Duration,
@@ -22,7 +22,7 @@ pub enum ExpirationType {
 struct LruCacheEntry<V> {
     node_index: usize,
     insertion: Instant,
-    value: V,
+    value: Arc<V>,
 }
 
 #[allow(dead_code)]
@@ -48,7 +48,7 @@ where
             LruCacheEntry {
                 node_index: self.lru_list.add_last(k.clone()).expect("Failed to add node to list"),
                 insertion: Instant::now(),
-                value,
+                value: Arc::new(value),
             }
         });
 
@@ -59,7 +59,7 @@ where
         return added;
     }
 
-    pub fn try_get(&mut self, key: &K) -> Option<&V> {
+    pub fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
         // If found in the map, remove from the lru list and reinsert at the end
         let lru_list = &mut self.lru_list;
 
@@ -80,7 +80,7 @@ where
                     lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
                     entry.get_mut().node_index = lru_list.add_last(key.clone()).expect("Failed to add node to list, cache is likely corrupted");
 
-                    Some(&entry.into_mut().value)
+                    Some(entry.into_mut().value.clone())
                 }
             },
             Entry::Vacant(_) => {

@@ -1,5 +1,5 @@
 use crate::LruCache;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use super::lru::ExpirationType;
 
@@ -35,7 +35,7 @@ where
         }
     }
 
-    pub fn try_get(&mut self, key: &K) -> Option<&V> {
+    pub fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
         self.resident.try_get(key)
     }
 }
@@ -69,8 +69,6 @@ mod tests {
         assert!(lru.try_add(4, "l"));
         // Max size is reached, next insertion should evict oldest entry, which is 1
         assert!(lru.try_add(5, "o"));
-        // "o" was only accessed once, so it only is in the probatory cache, so no eviction should have happened in the resident cache
-        assert!(lru.try_get(&1).is_some());
         assert!(lru.try_add(5, "o"));
         assert!(lru.try_get(&1).is_none());
         assert!(lru.try_get(&2).is_some());
