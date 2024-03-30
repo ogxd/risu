@@ -3,44 +3,42 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+pub struct LruCache<K, V>
+{
+    lru_list: ArenaLinkedList<K>,
+    map: HashMap<K, LruCacheEntry<V>>,
+    expiration: Duration,
+    expiration_type: ExpirationType,
+    max_size: usize
+}
+
 #[derive(PartialEq)]
-enum ExpirationType {
+pub enum ExpirationType {
     Absolute,
     Sliding
 }
 
-pub struct LruCache<K, H, V> {
-    lru_list: ArenaLinkedList<H>,
-    map: HashMap<H, LruCacheEntry<V>>,
-    expiration: Duration,
-    expiration_type: ExpirationType,
-    max_size: usize,
-    factory: Box<dyn Fn(&K) -> H>,
-}
-
-pub struct LruCacheEntry<V> {
+struct LruCacheEntry<V> {
     node_index: usize,
     insertion: Instant,
     value: V,
 }
 
-impl<K, H, V> LruCache<K, H, V>
+impl<K, V> LruCache<K, V>
 where
-    H: Eq + std::hash::Hash + Clone,
+    K: Eq + std::hash::Hash + Clone
 {
-    pub fn new(factory: Box<dyn Fn(&K) -> H>) -> Self {
+    pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
         Self {
-            lru_list: ArenaLinkedList::new_with_capacity(4),
+            lru_list: ArenaLinkedList::new_with_capacity(max_size),
             map: HashMap::new(),
-            expiration: Duration::MAX,
-            expiration_type: ExpirationType::Absolute,
-            max_size: 4,
-            factory: factory
+            expiration: expiration,
+            expiration_type: expiration_type,
+            max_size: max_size
         }
     }
 
     pub fn try_add(&mut self, key: K, value: V) -> bool {
-        let key = (self.factory)(&key);
         let mut added = false;
 
         self.map.entry(key).or_insert_with_key(|k| {
@@ -57,6 +55,36 @@ where
         }
 
         return added;
+    }
+
+    pub fn try_get(&mut self, key: &K) -> Option<&V> {
+        // If found in the map, remove from the lru list and reinsert at the end
+        let lru_list = &mut self.lru_list;
+
+        match self.map.entry(key.clone()) {
+            Entry::Occupied(mut entry) => {
+                if Instant::now() - entry.get().insertion > self.expiration {
+                    // Entry has expired, we remove it and pretend it's not in the cache
+                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
+                    entry.remove_entry();
+                    None
+                } else {
+                    if self.expiration_type == ExpirationType::Sliding {
+                        // Refresh duration
+                        entry.get_mut().insertion = Instant::now();
+                    }
+        
+                    // Move to the end of the list (the "LRU" part)
+                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
+                    entry.get_mut().node_index = lru_list.add_last(key.clone()).expect("Failed to add node to list, cache is likely corrupted");
+
+                    Some(&entry.into_mut().value)
+                }
+            },
+            Entry::Vacant(_) => {
+                None
+            }
+        }
     }
 
     fn trim(&mut self) {
@@ -76,37 +104,6 @@ where
             index = next_index;
         }
     }
-
-    pub fn try_get(&mut self, key: &H) -> Option<&V> {
-        // If found in the map, remove from the lru list and reinsert at the end
-        let lru_list = &mut self.lru_list;
-
-        match self.map.entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                if Instant::now() - entry.get().insertion > self.expiration {
-                    // Entry has expired, we remove it and pretend it's not in the cache
-                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
-                    entry.remove_entry();
-                    println!("Expired key");
-                    None
-                } else {
-                    if self.expiration_type == ExpirationType::Sliding {
-                        // Refresh duration
-                        entry.get_mut().insertion = Instant::now();
-                    }
-        
-                    // Move to the end of the list
-                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
-                    entry.get_mut().node_index = lru_list.add_last(key.clone()).expect("Failed to add node to list, cache is likely corrupted");
-
-                    Some(&entry.into_mut().value)
-                }
-            },
-            Entry::Vacant(_) => {
-                None
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -115,7 +112,7 @@ mod tests {
 
     #[test]
     fn basic() {
-        let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
+        let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_get(&1).is_none());
         assert!(lru.try_add(1, "hello"));
         assert!(!lru.try_add(1, "hello"));
@@ -124,7 +121,7 @@ mod tests {
 
     #[test]
     fn trimming() {
-        let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
+        let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_add(1, "h"));
         assert!(lru.try_add(2, "e"));
         assert!(lru.try_add(3, "l"));
@@ -140,7 +137,7 @@ mod tests {
 
     #[test]
     fn reordering() {
-        let mut lru = LruCache::<u32, u32, &str>::new(Box::new(|x: &u32| x.clone()));
+        let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_add(1, "h"));
         assert!(lru.try_add(2, "e"));
         assert!(lru.try_add(3, "l"));
