@@ -1,8 +1,8 @@
-mod arena_linked_list;
-mod lru;
+mod caches;
+mod collections;
 
-pub use lru::LruCache;
-pub use arena_linked_list::ArenaLinkedList;
+pub use caches::LruCache;
+pub use collections::ArenaLinkedList;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};

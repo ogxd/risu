@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+#[allow(dead_code)]
 pub struct LruCache<K, V>
 {
     lru_list: ArenaLinkedList<K>,
@@ -24,6 +25,7 @@ struct LruCacheEntry<V> {
     value: V,
 }
 
+#[allow(dead_code)]
 impl<K, V> LruCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone
