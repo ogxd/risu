@@ -1,5 +1,5 @@
 use crate::ProbatoryCache;
-use std::{borrow::BorrowMut, collections::HashMap, hash::{DefaultHasher, Hasher}, sync::{Arc, Mutex}, time::Duration};
+use std::{borrow::BorrowMut, collections::HashMap, hash::{DefaultHasher, Hasher}, ops::Deref, sync::{Arc, Mutex}, time::Duration};
 
 use super::lru::ExpirationType;
 
@@ -49,18 +49,43 @@ where
     // }
 }
 
-pub struct MyStruct {
-    map: HashMap<u32, u32>
+pub struct MyStruct1 {
+    map: HashMap<u32, Arc<u32>>
 }
 
-impl MyStruct {
-    pub fn get1(&self, key: u32) -> Option<&u32> {
+impl MyStruct1 {
+    pub fn get(&self, key: u32) -> Option<&Arc<u32>> {
         self.map.get(&key)
     }
+}
 
-    pub fn get2(&self, key: u32) -> Option<&u32> {
-        self.get1(key)
+pub struct MyStruct2 {
+    s: Arc<Mutex<MyStruct1>>
+}
+
+impl MyStruct2 {
+    pub fn get(&self, key: u32) -> Option<Arc<u32>> {
+        let s = self.s.lock().unwrap();
+        match s.get(key) {
+            Some(value) => Some(value.clone()),
+            None => None
+        }
     }
+
+    // pub fn get2(&self, key: u32) -> Option<&u32> {
+    //     let s = self.s.lock().unwrap();
+    //     s.deref().get(key)
+    // }
+
+    // pub fn get3(&self, key: u32) -> Option<&u32> {
+    //     let s = self.s.lock().unwrap();
+    //     s.deref().get(key).map(|value| value)
+    // }
+
+    // pub fn get4(&self, key: u32) -> Option<&u32> {
+    //     let s = self.s.lock().unwrap();
+    //     (*s).get(key)
+    // }
 }
 
 #[cfg(test)]
