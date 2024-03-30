@@ -1,12 +1,6 @@
 # risu
 
-```shell
-brew install protobuf
-brew install grpcurl
-cargo run --bin demo
-cargo run --bin risu
-grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}' '127.0.0.1:3001' helloworld.Greeter/SayHello
-```
+Blazingly fast and ultra-efficient multi-protocol read-through caching proxy.
 
 ## Todo
 
@@ -18,10 +12,12 @@ grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}
 - [ ] Expose prometheus metrics
 - [x] Setup and run benchmarks
 - [ ] Setup CI
-- [x] Implement arena linked list
+- [x] Implement arena-based linked list
 - [x] Implement LRU cache
 - [x] Implement probatory LRU cache
 - [x] Implemented in-memory sharding
+- [ ] Use gxhash for sharding and keying
+- [ ] Implement actual caching in risu
 - [ ] Design hot keys cluster sharing
 - [ ] Find out how risu will know service to reach
 - [ ] Find out how to configure service
