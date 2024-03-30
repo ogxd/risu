@@ -13,7 +13,7 @@ pub struct LruCache<K, V>
     max_size: usize
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum ExpirationType {
     Absolute,
     Sliding
