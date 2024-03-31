@@ -4,18 +4,16 @@ mod collections;
 pub use caches::*;
 pub use collections::*;
 
+use hyper::http::Uri;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};
-use hyper::http::Uri;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
 pub async fn start() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
 
-    let make_svc = make_service_fn(|_conn| async {
-        Ok::<_, Infallible>(service_fn(forward_request))
-    });
+    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(forward_request)) });
 
     println!("Listening on http://{}", addr);
 
@@ -27,7 +25,6 @@ pub async fn start() {
 }
 
 async fn forward_request(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-
     println!("Forwarding request to: {:?}", req.uri());
 
     let target_uri = Uri::builder()
@@ -45,10 +42,8 @@ async fn forward_request(req: Request<Body>) -> Result<Response<Body>, hyper::Er
     let headers = forwarded_req.headers_mut().expect("Failed to get headers");
     headers.extend(req.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
 
-    let client = Client::builder()
-        .http2_only(true)
-        .build_http();
-    
+    let client = Client::builder().http2_only(true).build_http();
+
     let resp = client
         .request(forwarded_req.body(req.into_body()).expect("Failed building request"))
         .await

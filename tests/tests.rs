@@ -1,11 +1,11 @@
 use std::time::Duration;
 
+use hello_world::greeter_client::GreeterClient;
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
 use risu;
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
-use hello_world::greeter_client::GreeterClient;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -16,10 +16,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
@@ -90,9 +87,7 @@ async fn grpc() {
 
     let mut client = GreeterClient::connect("http://127.0.0.1:3001").await.unwrap();
 
-    let request = tonic::Request::new(HelloRequest {
-        name: "Tonic".into(),
-    });
+    let request = tonic::Request::new(HelloRequest { name: "Tonic".into() });
 
     let response = client.say_hello(request).await.unwrap();
 

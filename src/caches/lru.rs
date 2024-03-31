@@ -10,13 +10,13 @@ pub struct LruCache<K, V> {
     map: HashMap<K, LruCacheEntry<V>>,
     expiration: Duration,
     expiration_type: ExpirationType,
-    max_size: usize
+    max_size: usize,
 }
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum ExpirationType {
     Absolute,
-    Sliding
+    Sliding,
 }
 
 struct LruCacheEntry<V> {
@@ -28,7 +28,7 @@ struct LruCacheEntry<V> {
 #[allow(dead_code)]
 impl<K, V> LruCache<K, V>
 where
-    K: Eq + std::hash::Hash + Clone
+    K: Eq + std::hash::Hash + Clone,
 {
     pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
         Self {
@@ -36,7 +36,7 @@ where
             map: HashMap::new(),
             expiration: expiration,
             expiration_type: expiration_type,
-            max_size: max_size
+            max_size: max_size,
         }
     }
 
@@ -67,7 +67,9 @@ where
             Entry::Occupied(mut entry) => {
                 if Instant::now() - entry.get().insertion > self.expiration {
                     // Entry has expired, we remove it and pretend it's not in the cache
-                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
+                    lru_list
+                        .remove(entry.get().node_index)
+                        .expect("Failed to remove node, cache is likely corrupted");
                     entry.remove_entry();
                     None
                 } else {
@@ -75,31 +77,44 @@ where
                         // Refresh duration
                         entry.get_mut().insertion = Instant::now();
                     }
-        
+
                     // Move to the end of the list (the "LRU" part)
-                    lru_list.remove(entry.get().node_index).expect("Failed to remove node, cache is likely corrupted");
-                    entry.get_mut().node_index = lru_list.add_last(key.clone()).expect("Failed to add node to list, cache is likely corrupted");
+                    lru_list
+                        .remove(entry.get().node_index)
+                        .expect("Failed to remove node, cache is likely corrupted");
+                    entry.get_mut().node_index = lru_list
+                        .add_last(key.clone())
+                        .expect("Failed to add node to list, cache is likely corrupted");
 
                     Some(entry.into_mut().value.clone())
                 }
-            },
-            Entry::Vacant(_) => {
-                None
             }
+            Entry::Vacant(_) => None,
         }
     }
 
     fn trim(&mut self) {
         let mut index = self.lru_list.get_first_index().unwrap_or(usize::MAX);
         while index != usize::MAX {
-            let node = self.lru_list.get(index).expect("Failed to get node, cache is likely corrupted");
-            let key = node.get_value().as_ref().expect("Node has no value, cache is likely corrupted").clone();
-            let entry = self.map.get(&key).expect("Node not found in map, cache is likely corrupted");
+            let node = self
+                .lru_list
+                .get(index)
+                .expect("Failed to get node, cache is likely corrupted");
+            let key = node
+                .get_value()
+                .as_ref()
+                .expect("Node has no value, cache is likely corrupted")
+                .clone();
+            let entry = self
+                .map
+                .get(&key)
+                .expect("Node not found in map, cache is likely corrupted");
             let next_index = node.get_after_index();
-            if self.lru_list.count() > self.max_size
-            || Instant::now() - entry.insertion > self.expiration {
+            if self.lru_list.count() > self.max_size || Instant::now() - entry.insertion > self.expiration {
                 self.map.remove(&key);
-                self.lru_list.remove(index).expect("Failed to remove node, cache is likely corrupted");
+                self.lru_list
+                    .remove(index)
+                    .expect("Failed to remove node, cache is likely corrupted");
             } else {
                 break;
             }

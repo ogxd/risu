@@ -6,19 +6,20 @@ use std::time::Duration;
 use super::lru::ExpirationType;
 
 #[allow(dead_code)]
-pub struct ShardedCache<K, V>
-{
+pub struct ShardedCache<K, V> {
     shards: Vec<Arc<Mutex<ProbatoryCache<K, V>>>>,
 }
 
 #[allow(dead_code)]
 impl<K, V> ShardedCache<K, V>
 where
-    K: Eq + std::hash::Hash + Clone
+    K: Eq + std::hash::Hash + Clone,
 {
     pub fn new(shards: usize, max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
         Self {
-            shards: (0..shards).map(|_| Arc::new(Mutex::new(ProbatoryCache::new(max_size, expiration, expiration_type)))).collect()
+            shards: (0..shards)
+                .map(|_| Arc::new(Mutex::new(ProbatoryCache::new(max_size, expiration, expiration_type))))
+                .collect(),
         }
     }
 

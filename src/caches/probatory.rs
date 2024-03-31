@@ -4,16 +4,15 @@ use std::{sync::Arc, time::Duration};
 use super::lru::ExpirationType;
 
 #[allow(dead_code)]
-pub struct ProbatoryCache<K, V>
-{
+pub struct ProbatoryCache<K, V> {
     probatory: LruCache<K, ()>,
-    resident: LruCache<K, V>
+    resident: LruCache<K, V>,
 }
 
 #[allow(dead_code)]
 impl<K, V> ProbatoryCache<K, V>
 where
-    K: Eq + std::hash::Hash + Clone
+    K: Eq + std::hash::Hash + Clone,
 {
     pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
         Self {
@@ -30,8 +29,8 @@ where
                 // Key was already in the probatory cache, but just entered the resident cache
                 true => true,
                 // Already in the resident cache
-                false => false
-            }
+                false => false,
+            },
         }
     }
 

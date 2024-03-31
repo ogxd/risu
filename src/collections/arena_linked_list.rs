@@ -9,7 +9,6 @@ pub struct ArenaLinkedList<T> {
 
 #[allow(dead_code)]
 impl<T> ArenaLinkedList<T> {
-  
     pub fn new_with_capacity(capacity: usize) -> Self {
         let capacity = capacity.min(1);
         let mut array = Vec::with_capacity(capacity);
@@ -43,26 +42,22 @@ impl<T> ArenaLinkedList<T> {
         Ok(self.last_index)
     }
 
-    pub fn clear(&mut self)
-    {
+    pub fn clear(&mut self) {
         self.fill_free(0, self.array.len());
         self.count = 0;
         self.first_index = usize::MAX;
         self.last_index = usize::MAX;
     }
 
-    fn fill_free(&mut self, start: usize, count: usize)
-    {
+    fn fill_free(&mut self, start: usize, count: usize) {
         self.first_free_node_index = start;
-        for i in start..(start + count - 1)
-        {
+        for i in start..(start + count - 1) {
             self.array[i].after_index = i + 1;
         }
         self.array[start + count - 1].after_index = usize::MAX;
     }
 
-    pub fn get(&self, index: usize) -> Result<&ArenaLinkedListNode<T>, ()>
-    {
+    pub fn get(&self, index: usize) -> Result<&ArenaLinkedListNode<T>, ()> {
         let node = &self.array[index];
         if node.value.is_none() {
             return Err(());
@@ -70,11 +65,8 @@ impl<T> ArenaLinkedList<T> {
         Ok(node)
     }
 
-    pub fn remove(&mut self, index: usize) -> Result<(), ()>
-    {
-        if self.count == 0
-        || index == usize::MAX
-        || index > self.array.len() {
+    pub fn remove(&mut self, index: usize) -> Result<(), ()> {
+        if self.count == 0 || index == usize::MAX || index > self.array.len() {
             return Err(());
         }
         let node = &mut self.array[index];
@@ -114,10 +106,9 @@ impl<T> ArenaLinkedList<T> {
     }
 
     pub fn add_before(&mut self, value: T, index: usize) -> Result<usize, &'static str> {
-
         // Create new node
         let new_node_index = self.create_node(value);
-    
+
         // Remap links
         if self.count == 0 || index == usize::MAX {
             self.first_index = new_node_index;
@@ -140,13 +131,13 @@ impl<T> ArenaLinkedList<T> {
             }
             let node = &mut self.array[index];
             node.before_index = new_node_index;
-    
+
             // If inserted before first, it becomes first
             if self.first_index == index {
                 self.first_index = new_node_index;
             }
         }
-    
+
         Ok(new_node_index)
     }
 
@@ -155,10 +146,9 @@ impl<T> ArenaLinkedList<T> {
     }
 
     pub fn add_after(&mut self, value: T, index: usize) -> Result<usize, &'static str> {
-
         // Create new node
         let new_node_index = self.create_node(value);
-    
+
         // Remap links
         if self.count == 0 || index == usize::MAX {
             self.first_index = new_node_index;
@@ -181,13 +171,13 @@ impl<T> ArenaLinkedList<T> {
             }
             let node = &mut self.array[index];
             node.after_index = new_node_index;
-    
+
             // If inserted after last, it becomes last
             if self.last_index == index {
                 self.last_index = new_node_index;
             }
         }
-    
+
         Ok(new_node_index)
     }
 
@@ -205,16 +195,16 @@ impl<T> ArenaLinkedList<T> {
         }
 
         let index = self.first_free_node_index;
-    
+
         let new_node = &mut self.array[index];
-    
+
         self.first_free_node_index = new_node.after_index;
         new_node.after_index = usize::MAX;
         new_node.before_index = usize::MAX;
         new_node.value = Some(value);
-    
+
         self.count += 1;
-    
+
         index
     }
 
@@ -248,7 +238,7 @@ impl<'a, T> Iterator for Enumerator<'a, T> {
 pub struct ArenaLinkedListNode<T> {
     before_index: usize,
     after_index: usize,
-    value: Option<T>
+    value: Option<T>,
 }
 
 impl<T> ArenaLinkedListNode<T> {
@@ -256,7 +246,7 @@ impl<T> ArenaLinkedListNode<T> {
         Self {
             before_index: usize::MAX,
             after_index: usize::MAX,
-            value: None
+            value: None,
         }
     }
 
@@ -271,8 +261,8 @@ impl<T> ArenaLinkedListNode<T> {
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
     use super::*;
+    use itertools::Itertools;
 
     #[test]
     fn test_arena_linked_list() {
@@ -288,7 +278,9 @@ mod tests {
         assert_eq!(list.count(), 2);
 
         // Insert "wonderful" before "world"
-        let wonderful_index = list.add_before("wonderful", world_index).expect("Failed adding wonderful");
+        let wonderful_index = list
+            .add_before("wonderful", world_index)
+            .expect("Failed adding wonderful");
         assert_eq!(list.count(), 3);
 
         // Get
