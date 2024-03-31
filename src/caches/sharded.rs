@@ -1,4 +1,4 @@
-use crate::ProbatoryCache;
+use crate::{Cache, ProbatoryCache};
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -8,6 +8,19 @@ use super::lru::ExpirationType;
 #[allow(dead_code)]
 pub struct ShardedCache<K, V> {
     shards: Vec<Arc<Mutex<ProbatoryCache<K, V>>>>,
+}
+
+impl<K, V> Cache<K, V> for ShardedCache<K, V>
+where
+    K: Eq + std::hash::Hash + Clone
+{
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
+        self.get_shard(&key).lock().unwrap().try_add_arc(key, value)
+    }
+
+    fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
+        self.get_shard(&key).lock().unwrap().try_get(key)
+    }
 }
 
 #[allow(dead_code)]
@@ -29,14 +42,6 @@ where
         let hash = hasher.finish() as usize;
         let shard = hash % self.shards.len();
         &self.shards[shard]
-    }
-
-    pub fn try_add(&mut self, key: K, value: V) -> bool {
-        self.get_shard(&key).lock().unwrap().try_add(key, value)
-    }
-
-    pub fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
-        self.get_shard(&key).lock().unwrap().try_get(key)
     }
 }
 

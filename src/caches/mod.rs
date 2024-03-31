@@ -9,8 +9,13 @@ pub use sharded::ShardedCache;
 
 use std::{future::Future, sync::Arc};
 
-trait Cache<K, V> {
-    fn try_add(&mut self, key: K, value: Arc<V>) -> bool;
+#[allow(async_fn_in_trait)]
+pub trait Cache<K, V> {
+    fn try_add(&mut self, key: K, value: V) -> bool {
+        self.try_add_arc(key, Arc::new(value))
+    }
+
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool;
 
     fn try_get(&mut self, key: &K) -> Option<Arc<V>>;
 
@@ -41,7 +46,7 @@ trait Cache<K, V> {
                         let a_value = Arc::new(value);
                         // This might fail if the key was added by another thread, but we don't care
                         // This is preferred over blocking the cache during the whole factory call duration
-                        self.try_add(key.clone(), a_value.clone());
+                        self.try_add_arc(key.clone(), a_value.clone());
                         Ok(a_value)
                     }
                     Err(()) => Err(()),

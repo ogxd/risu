@@ -1,4 +1,4 @@
-use crate::LruCache;
+use crate::{Cache, LruCache};
 use std::{sync::Arc, time::Duration};
 
 use super::lru::ExpirationType;
@@ -7,6 +7,28 @@ use super::lru::ExpirationType;
 pub struct ProbatoryCache<K, V> {
     probatory: LruCache<K, ()>,
     resident: LruCache<K, V>,
+}
+
+impl<K, V> Cache<K, V> for ProbatoryCache<K, V>
+where
+    K: Eq + std::hash::Hash + Clone
+{
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
+        match self.probatory.try_add(key.clone(), ()) {
+            // New key in the probatory cache
+            true => true,
+            false => match self.resident.try_add_arc(key.clone(), value) {
+                // Key was already in the probatory cache, but just entered the resident cache
+                true => true,
+                // Already in the resident cache
+                false => false,
+            },
+        }
+    }
+
+    fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
+        self.resident.try_get(key)
+    }
 }
 
 #[allow(dead_code)]
@@ -21,22 +43,7 @@ where
         }
     }
 
-    pub fn try_add(&mut self, key: K, value: V) -> bool {
-        match self.probatory.try_add(key.clone(), ()) {
-            // New key in the probatory cache
-            true => true,
-            false => match self.resident.try_add(key.clone(), value) {
-                // Key was already in the probatory cache, but just entered the resident cache
-                true => true,
-                // Already in the resident cache
-                false => false,
-            },
-        }
-    }
 
-    pub fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
-        self.resident.try_get(key)
-    }
 }
 
 #[cfg(test)]

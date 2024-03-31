@@ -1,4 +1,4 @@
-use crate::ArenaLinkedList;
+use crate::{ArenaLinkedList, Cache};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,22 +25,11 @@ struct LruCacheEntry<V> {
     value: Arc<V>,
 }
 
-#[allow(dead_code)]
-impl<K, V> LruCache<K, V>
+impl<K, V> Cache<K, V> for LruCache<K, V>
 where
-    K: Eq + std::hash::Hash + Clone,
+    K: Eq + std::hash::Hash + Clone
 {
-    pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
-        Self {
-            lru_list: ArenaLinkedList::new_with_capacity(max_size),
-            map: HashMap::new(),
-            expiration: expiration,
-            expiration_type: expiration_type,
-            max_size: max_size,
-        }
-    }
-
-    pub fn try_add(&mut self, key: K, value: V) -> bool {
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
         let mut added = false;
 
         self.map.entry(key).or_insert_with_key(|k| {
@@ -48,7 +37,7 @@ where
             LruCacheEntry {
                 node_index: self.lru_list.add_last(k.clone()).expect("Failed to add node to list"),
                 insertion: Instant::now(),
-                value: Arc::new(value),
+                value: value,
             }
         });
 
@@ -59,7 +48,7 @@ where
         return added;
     }
 
-    pub fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
+    fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
         // If found in the map, remove from the lru list and reinsert at the end
         let lru_list = &mut self.lru_list;
 
@@ -90,6 +79,22 @@ where
                 }
             }
             Entry::Vacant(_) => None,
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl<K, V> LruCache<K, V>
+where
+    K: Eq + std::hash::Hash + Clone,
+{
+    pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
+        Self {
+            lru_list: ArenaLinkedList::new_with_capacity(max_size),
+            map: HashMap::new(),
+            expiration: expiration,
+            expiration_type: expiration_type,
+            max_size: max_size,
         }
     }
 
