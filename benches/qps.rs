@@ -1,9 +1,7 @@
-use std::time::Duration;
-
-use hello_world::greeter_client::GreeterClient;
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
-use risu::{self, RisuConfiguration, RisuServer};
+use risu::{self, RisuServer};
+use simplelog::*;
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -53,47 +51,27 @@ impl TestServer {
         }
     }
 
-    pub fn new_risu() -> Self {
-        let (shutdown_sender, shutdown_receiver) = oneshot::channel();
-        let server_handle = tokio::spawn(async move {
-            let start_fut = RisuServer::start_from_config_file("tests/config.yaml");
-            tokio::select! {
-                _ = start_fut => {},
-                _ = shutdown_receiver => {
-                    // Shutdown signal received
-                    println!("Shutting down the server...");
-                }
-            }
-        });
-        Self {
-            server_handle,
-            shutdown_sender,
-        }
-    }
-
     pub async fn shutdown(self) {
         self.shutdown_sender.send(()).unwrap();
         self.server_handle.await.unwrap();
     }
 }
 
-#[tokio::test]
-async fn grpc() {
+// grpcurl -plaintext -import-path ./proto -proto hello.proto -d '{"name": "Tonic"}' '127.0.0.1:3001' helloworld.Greeter/SayHello
+
+#[tokio::main]
+async fn main() {
+    CombinedLogger::init(vec![TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )])
+    .unwrap();
+
     let server = TestServer::new_grpc();
-    let risu = TestServer::new_risu();
 
-    // Warmup
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    let mut client = GreeterClient::connect("http://127.0.0.1:3001").await.unwrap();
-
-    let request = tonic::Request::new(HelloRequest { name: "Tonic".into() });
-
-    let response = client.say_hello(request).await.unwrap();
+    RisuServer::start_from_config_file("benches/config.yaml").await;
 
     server.shutdown().await;
-    risu.shutdown().await;
-
-    // Check grpc message content
-    assert!(response.get_ref().message == "Hello Tonic!");
 }

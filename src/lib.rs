@@ -3,29 +3,23 @@ extern crate log;
 
 mod caches;
 mod collections;
+pub mod config;
 
 pub use caches::*;
 pub use collections::*;
+pub use config::RisuConfiguration;
 
 use gxhash::GxHasher;
 use hyper::body::Bytes;
 use hyper::http::Uri;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};
-use serde::Deserialize;
+use rand::Rng;
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-
-use crate::lru::ExpirationType;
-
-#[derive(Debug, Deserialize)]
-pub struct RisuConfiguration {
-    pub listening_port: u16,
-    pub target_address: String,
-}
 
 pub struct RisuServer {
     configuration: RisuConfiguration,
@@ -33,14 +27,25 @@ pub struct RisuServer {
 }
 
 impl RisuServer {
+    pub async fn start_from_config_str(config_str: &str) {
+        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(config_str).unwrap();
+        RisuServer::start(configuration).await;
+    }
+
+    pub async fn start_from_config_file(config_file: &str) {
+        let contents = std::fs::read_to_string(config_file).expect("Should have been able to read the file");
+        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents).unwrap();
+        RisuServer::start(configuration).await;
+    }
+
     pub async fn start(configuration: RisuConfiguration) {
         let server = Arc::new(RisuServer {
-            configuration: configuration,
+            configuration: configuration.clone(),
             cache: ShardedCache::<u128, Response<Bytes>>::new(
-                8,
-                100_000,
+                configuration.in_memory_shards as usize,
+                configuration.cache_resident_size,
                 Duration::from_secs(600),
-                ExpirationType::Absolute,
+                lru::ExpirationType::Absolute,
             ),
         });
 
@@ -60,8 +65,7 @@ impl RisuServer {
     }
 
     pub async fn handle_request(
-        s: Arc<Self>,
-        //cache: Arc<ShardedCache<u128, Response<Bytes>>>,
+        server: Arc<Self>,
         request: Request<Body>,
     ) -> Result<Response<Body>, hyper::Error> {
         debug!("Received request from {:?}", request.uri());
@@ -80,7 +84,9 @@ impl RisuServer {
             hasher.finish_u128()
         };
 
-        let target_address = s.configuration.target_address.clone(); // Todo: Avoid cloning on every request
+        // Round robin target
+        let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
+        let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
 
         let value_factory = |request: Request<Bytes>| async move {
             debug!("Cache miss");
@@ -111,6 +117,8 @@ impl RisuServer {
 
             let client = Client::builder().http2_only(true).build_http();
 
+            debug!("Forwarding request");
+
             let resp = client.request(forwarded_req).await.expect("Failed to send request");
 
             // Buffer response body so that we can cache it and return it
@@ -118,10 +126,12 @@ impl RisuServer {
             let body_bytes: Bytes = hyper::body::to_bytes(body).await.unwrap();
             let response_buffered = Response::from_parts(parts, body_bytes);
 
+            debug!("Received response from target with status: {:?}", response_buffered.status());
+
             Ok(response_buffered)
         };
 
-        let result: Result<Arc<Response<Bytes>>, ()> = s
+        let result: Result<Arc<Response<Bytes>>, ()> = server
             .cache
             .get_or_add_from_item2(request_buffered, key_factory, value_factory)
             .await;
