@@ -12,6 +12,7 @@ use hyper::body::Bytes;
 use hyper::http::Uri;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};
+use serde::Deserialize;
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::net::SocketAddr;
@@ -20,17 +21,21 @@ use std::time::Duration;
 
 use crate::lru::ExpirationType;
 
-pub struct RisuServer {
+#[derive(Debug, Deserialize)]
+pub struct RisuConfiguration {
     pub listening_port: u16,
-    pub target_socket_addr: SocketAddr,
-    pub cache: ShardedCache<u128, Response<Bytes>>,
+    pub target_address: String,
+}
+
+pub struct RisuServer {
+    configuration: RisuConfiguration,
+    cache: ShardedCache<u128, Response<Bytes>>,
 }
 
 impl RisuServer {
-    pub async fn start() {
+    pub async fn start(configuration: RisuConfiguration) {
         let server = Arc::new(RisuServer {
-            listening_port: 3001,
-            target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
+            configuration: configuration,
             cache: ShardedCache::<u128, Response<Bytes>>::new(
                 8,
                 100_000,
@@ -39,7 +44,7 @@ impl RisuServer {
             ),
         });
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], server.listening_port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
         info!("Listening on http://{}", addr);
 
         let make_svc = make_service_fn(move |_conn| {
@@ -75,14 +80,14 @@ impl RisuServer {
             hasher.finish_u128()
         };
 
-        let target_addr = s.target_socket_addr.to_string();
+        let target_address = s.configuration.target_address.clone(); // Todo: Avoid cloning on every request
 
         let value_factory = |request: Request<Bytes>| async move {
             debug!("Cache miss");
 
             let target_uri = Uri::builder()
                 .scheme("http")
-                .authority(target_addr)
+                .authority(target_address)
                 .path_and_query(request.uri().path_and_query().unwrap().clone())
                 .build()
                 .expect("Failed to build target URI");

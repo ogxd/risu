@@ -4,7 +4,8 @@ extern crate log;
 use simplelog::*;
 
 use risu::RisuServer;
-use std::net::SocketAddr;
+use std::fs;
+use risu::RisuConfiguration;
 
 #[tokio::main]
 async fn main() {
@@ -18,9 +19,12 @@ async fn main() {
 
     info!("Starting risu...");
 
-    // RisuServer {
-    //     listening_port: 3001,
-    //     target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
-    // }
-    RisuServer::start().await;
+    // read the file.
+    let contents = fs::read_to_string("config.yaml")
+        .expect("Should have been able to read the file");
+
+    // don't unwrap like this in the real world! Errors will result in panic!
+    let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents).unwrap();
+
+    RisuServer::start(configuration).await;
 }

@@ -4,7 +4,7 @@ use std::time::Duration;
 use hello_world::greeter_client::GreeterClient;
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
-use risu::{self, RisuServer};
+use risu::{self, RisuConfiguration, RisuServer};
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -57,11 +57,11 @@ impl TestServer {
     pub fn new_risu() -> Self {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let server_handle = tokio::spawn(async move {
-            // let server = RisuServer {
-            //     listening_port: 3001,
-            //     target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
-            // };
-            let start_fut = RisuServer::start();
+            let configuration = RisuConfiguration {
+                listening_port: 3001,
+                target_address: SocketAddr::from(([127, 0, 0, 1], 3002)).to_string(),
+            };
+            let start_fut = RisuServer::start(configuration);
             tokio::select! {
                 _ = start_fut => {},
                 _ = shutdown_receiver => {
