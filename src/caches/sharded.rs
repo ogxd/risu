@@ -59,7 +59,7 @@ where
     where
         K: Clone,
         Kfac: Fn(&I) -> K,
-        Vfac: Fn(I) -> Fut,
+        Vfac: FnOnce(I) -> Fut,
         Fut: Future<Output = Result<V, ()>>,
     {
         let key = key_factory(&item);

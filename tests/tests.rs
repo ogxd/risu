@@ -57,11 +57,11 @@ impl TestServer {
     pub fn new_risu() -> Self {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let server_handle = tokio::spawn(async move {
-            let server = RisuServer {
-                listening_port: 3001,
-                target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
-            };
-            let start_fut = server.start();
+            // let server = RisuServer {
+            //     listening_port: 3001,
+            //     target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
+            // };
+            let start_fut = RisuServer::start();
             tokio::select! {
                 _ = start_fut => {},
                 _ = shutdown_receiver => {

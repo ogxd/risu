@@ -18,10 +18,9 @@ async fn main() {
 
     info!("Starting risu...");
 
-    RisuServer {
-        listening_port: 3001,
-        target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
-    }
-    .start()
-    .await;
+    // RisuServer {
+    //     listening_port: 3001,
+    //     target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
+    // }
+    RisuServer::start().await;
 }

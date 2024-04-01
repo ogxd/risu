@@ -7,12 +7,13 @@ mod collections;
 pub use caches::*;
 pub use collections::*;
 
-use hyper::body::to_bytes;
+use gxhash::GxHasher;
+use hyper::body::Bytes;
 use hyper::http::Uri;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server};
 use std::convert::Infallible;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,29 +23,28 @@ use crate::lru::ExpirationType;
 pub struct RisuServer {
     pub listening_port: u16,
     pub target_socket_addr: SocketAddr,
+    pub cache: ShardedCache<u128, Response<Bytes>>,
 }
 
 impl RisuServer {
-    pub async fn start(&self) {
-        let addr = SocketAddr::from(([0, 0, 0, 0], self.listening_port));
+    pub async fn start() {
+        let server = Arc::new(RisuServer {
+            listening_port: 3001,
+            target_socket_addr: SocketAddr::from(([127, 0, 0, 1], 3002)),
+            cache: ShardedCache::<u128, Response<Bytes>>::new(
+                8,
+                100_000,
+                Duration::from_secs(600),
+                ExpirationType::Absolute,
+            ),
+        });
+
+        let addr = SocketAddr::from(([0, 0, 0, 0], server.listening_port));
         info!("Listening on http://{}", addr);
 
-        let cache = Arc::new(ShardedCache::<u128, Response<Body>>::new(
-            8,
-            100_000,
-            Duration::from_secs(600),
-            ExpirationType::Absolute,
-        ));
-
-        // let make_svc = make_service_fn(|_conn| async {
-        //     Ok::<_, hyper::Error>(service_fn(|_req| handle_request()))
-        // });
-
-        // let server = Server::bind(&addr).serve(make_svc);
-
         let make_svc = make_service_fn(move |_conn| {
-            let cache = cache.clone();
-            async move { Ok::<_, Infallible>(service_fn(move |req| Self::handle_request(cache.clone(), req))) }
+            let server = server.clone();
+            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
         });
 
         Server::bind(&addr)
@@ -55,55 +55,78 @@ impl RisuServer {
     }
 
     pub async fn handle_request(
-        cache: Arc<ShardedCache<u128, Response<Body>>>, req: Request<Body>,
+        s: Arc<Self>,
+        //cache: Arc<ShardedCache<u128, Response<Bytes>>>,
+        request: Request<Body>,
     ) -> Result<Response<Body>, hyper::Error> {
-        debug!("Received request from {:?}", req.uri());
+        debug!("Received request from {:?}", request.uri());
 
-        //let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        // Buffer request body so that we can hash it and forward it
+        let (parts, body) = request.into_parts();
+        let body_bytes: Bytes = hyper::body::to_bytes(body).await.unwrap();
+        let request_buffered = Request::from_parts(parts, body_bytes);
 
-        let closure = |r: Request<Body>| async move {
+        let key_factory = |request: &Request<Bytes>| {
+            // Hash request content
+            let mut hasher = GxHasher::with_seed(123);
+            request.uri().path().hash(&mut hasher);
+            request.uri().query().hash(&mut hasher);
+            request.body().hash(&mut hasher);
+            hasher.finish_u128()
+        };
+
+        let target_addr = s.target_socket_addr.to_string();
+
+        let value_factory = |request: Request<Bytes>| async move {
+            debug!("Cache miss");
+
             let target_uri = Uri::builder()
                 .scheme("http")
-                .authority("127.0.0.1:3002")
-                .path_and_query(r.uri().path_and_query().unwrap().clone())
+                .authority(target_addr)
+                .path_and_query(request.uri().path_and_query().unwrap().clone())
                 .build()
                 .expect("Failed to build target URI");
 
+            // Copy path and query
             let mut forwarded_req = Request::builder()
-                .method(r.method())
+                .method(request.method())
                 .uri(target_uri)
-                .version(r.version());
+                .version(request.version());
 
+            // Copy headers
             let headers = forwarded_req.headers_mut().expect("Failed to get headers");
-            headers.extend(r.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+            headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+
+            // Copy body
+            let forwarded_req: Request<Bytes> = forwarded_req
+                .body(request.into_body())
+                .expect("Failed building request");
+
+            let forwarded_req: Request<Body> = forwarded_req.map(|bytes| Body::from(bytes));
 
             let client = Client::builder().http2_only(true).build_http();
 
-            let resp = client
-                .request(forwarded_req.body(r.into_body()).expect("Failed building request"))
-                .await
-                .expect("Failed to send request");
+            let resp = client.request(forwarded_req).await.expect("Failed to send request");
 
-            Ok(resp)
+            // Buffer response body so that we can cache it and return it
+            let (parts, body) = resp.into_parts();
+            let body_bytes: Bytes = hyper::body::to_bytes(body).await.unwrap();
+            let response_buffered = Response::from_parts(parts, body_bytes);
+
+            Ok(response_buffered)
         };
 
-        let result = cache
-            .get_or_add_from_item2(
-                req,
-                |r: &Request<Body>| {
-                    // Hash request content
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    r.uri().path().hash(&mut hasher);
-                    r.uri().query().hash(&mut hasher);
-                    //let bb = r.into_body();
-                    //let b = to_bytes(bb);
-                    
-                    123u128
-                },
-                closure,
-            )
+        let result: Result<Arc<Response<Bytes>>, ()> = s
+            .cache
+            .get_or_add_from_item2(request_buffered, key_factory, value_factory)
             .await;
 
-        return Ok(Arc::try_unwrap(result.unwrap()).unwrap());
+        match result {
+            Ok(response) => {
+                let response: Response<Body> = Arc::try_unwrap(response).unwrap().map(|bytes| Body::from(bytes));
+                return Ok(response);
+            }
+            Err(_) => return Ok(Response::builder().status(500).body(Body::empty()).unwrap()),
+        }
     }
 }
