@@ -11,7 +11,7 @@ pub struct ProbatoryCache<K, V> {
 
 impl<K, V> Cache<K, V> for ProbatoryCache<K, V>
 where
-    K: Eq + std::hash::Hash + Clone
+    K: Eq + std::hash::Hash + Clone,
 {
     fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
         match self.probatory.try_add(key.clone(), ()) {
@@ -42,8 +42,6 @@ where
             resident: LruCache::new(max_size, expiration, expiration_type),
         }
     }
-
-
 }
 
 #[cfg(test)]
