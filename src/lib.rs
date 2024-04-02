@@ -86,7 +86,7 @@ impl RisuServer {
         });
 
         let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
-        info!("Listening on http://{}", addr);
+        info!("Listening on http://{}, http2:{}", addr, configuration.http2);
 
         let make_svc = make_service_fn(move |_conn| {
             let server = server.clone();
@@ -95,7 +95,7 @@ impl RisuServer {
         });
 
         Server::bind(&addr)
-            .http2_only(true) // Add missing import for the `http2` method
+            .http2_only(configuration.http2)
             .serve(make_svc)
             .await
             .expect("Failed starting server");

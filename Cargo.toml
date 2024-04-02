@@ -22,6 +22,10 @@ harness = false
 name = "qps"
 harness = false
 
+[[bench]]
+name = "qps_http"
+harness = false
+
 [dependencies]
 tonic = "0.11"
 prost = "0.12"

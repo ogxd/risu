@@ -16,6 +16,9 @@ pub struct RisuConfiguration {
 
     #[serde(default = "default_target_addresses")]
     pub target_addresses: Vec<String>,
+
+    #[serde(default = "default_http2")]
+    pub http2: bool,
 }
 
 // https://github.com/serde-rs/serde/issues/368 🙄
@@ -33,4 +36,7 @@ fn default_listening_port() -> u16 {
 }
 fn default_target_addresses() -> Vec<String> {
     vec!["127.0.0.1:3002".into()]
+}
+fn default_http2() -> bool {
+    false
 }
