@@ -90,8 +90,9 @@ impl RisuServer {
 
         let make_svc = make_service_fn(move |_conn| {
             let server = server.clone();
-            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
-            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
+            //Message: server closed the stream without sending trailers
+            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
+            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
         });
 
         Server::bind(&addr)

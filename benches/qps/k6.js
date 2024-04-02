@@ -4,33 +4,33 @@ import { check, sleep } from 'k6';
 const client = new grpc.Client();
 client.load(['definitions'], 'hello.proto');
 
-export const options = {
-    discardResponseBodies: true,
+// export const options = {
+//     discardResponseBodies: true,
   
-    scenarios: {
-      contacts: {
-        executor: 'ramping-arrival-rate',
+//     scenarios: {
+//       contacts: {
+//         executor: 'ramping-arrival-rate',
   
-        // Start iterations per `timeUnit`
-        startRate: 500,
+//         // Start iterations per `timeUnit`
+//         startRate: 500,
   
-        // Start `startRate` iterations per minute
-        timeUnit: '10s',
+//         // Start `startRate` iterations per minute
+//         timeUnit: '10s',
   
-        // Pre-allocate necessary VUs.
-        preAllocatedVUs: 50,
+//         // Pre-allocate necessary VUs.
+//         preAllocatedVUs: 50,
   
-        stages: [
-          { target: 1000, duration: '10s' },
-          { target: 2000, duration: '10s' },
-          { target: 5000, duration: '10s' },
-          { target: 10000, duration: '10s' },
-          { target: 20000, duration: '10s' },
-          { target: 50000, duration: '10s' },
-        ],
-      },
-    },
-  };
+//         stages: [
+//           { target: 1000, duration: '10s' },
+//           // { target: 2000, duration: '10s' },
+//           // { target: 5000, duration: '10s' },
+//           // { target: 10000, duration: '10s' },
+//           // { target: 20000, duration: '10s' },
+//           // { target: 50000, duration: '10s' },
+//         ],
+//       },
+//     },
+//   };
 
 export default () => {
   client.connect('127.0.0.1:3001', {
@@ -44,7 +44,7 @@ export default () => {
     'status is OK': (r) => r && r.status === grpc.StatusOK,
   });
 
-  console.log(JSON.stringify(response.message));
+  //console.log(JSON.stringify(response.message));
 
   client.close();
   sleep(1);
