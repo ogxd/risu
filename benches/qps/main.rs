@@ -15,7 +15,6 @@ pub struct MyGreeter {}
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
-        println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
@@ -62,7 +61,7 @@ impl TestServer {
 #[tokio::main]
 async fn main() {
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Debug,
+        LevelFilter::Info,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -71,7 +70,7 @@ async fn main() {
 
     let server = TestServer::new_grpc();
 
-    RisuServer::start_from_config_file("benches/config.yaml").await;
+    RisuServer::start_from_config_file("benches/qps/config.yaml").await;
 
     server.shutdown().await;
 }

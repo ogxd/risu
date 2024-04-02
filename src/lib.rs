@@ -10,7 +10,7 @@ pub use collections::*;
 pub use config::RisuConfiguration;
 
 use gxhash::GxHasher;
-use hyper::body::Bytes;
+use hyper::body::{Bytes, HttpBody};
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::http::Uri;
@@ -90,7 +90,8 @@ impl RisuServer {
 
         let make_svc = make_service_fn(move |_conn| {
             let server = server.clone();
-            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
+            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
+            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
         });
 
         Server::bind(&addr)
@@ -175,43 +176,54 @@ impl RisuServer {
             }
             Err(_) => return Ok(Response::builder().status(500).body(Body::empty()).unwrap()),
         }
+    }
 
-        // NO CACHING
-        // let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
-        // let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
+    pub async fn handle_request_no_caching(server: Arc<Self>, request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+        debug!("Received request from {:?}", request.uri());
 
-        // let target_uri = Uri::builder()
-        //     .scheme("http")
-        //     .authority(target_address)
-        //     .path_and_query(request.uri().path_and_query().unwrap().clone())
-        //     .build()
-        //     .expect("Failed to build target URI");
+        let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
+        let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
 
-        // // Copy path and query
-        // let mut forwarded_req = Request::builder()
-        //     .method(request.method())
-        //     .uri(target_uri)
-        //     .version(request.version());
+        let target_uri = Uri::builder()
+            .scheme("http")
+            .authority(target_address)
+            .path_and_query(request.uri().path_and_query().unwrap().clone())
+            .build()
+            .expect("Failed to build target URI");
 
-        // // Copy headers
-        // let headers = forwarded_req.headers_mut().expect("Failed to get headers");
-        // headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+        // Copy path and query
+        let mut forwarded_req = Request::builder()
+            .method(request.method())
+            .uri(target_uri)
+            .version(request.version());
 
-        // // Copy body
-        // let forwarded_req: Request<Body> = forwarded_req
-        //     .body(request.into_body())
-        //     .expect("Failed building request");
+        // Copy headers
+        let headers = forwarded_req.headers_mut().expect("Failed to get headers");
+        headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
 
-        // let forwarded_req: Request<Body> = forwarded_req.map(|bytes| Body::from(bytes));
+        // Copy body
+        let forwarded_req: Request<Body> = forwarded_req
+            .body(request.into_body())
+            .expect("Failed building request");
 
-        // let client = Client::builder().http2_only(true).build_http();
+        let forwarded_req: Request<Body> = forwarded_req.map(|bytes| Body::from(bytes));
 
-        // debug!("Forwarding request");
+        let client = Client::builder().http2_only(true).build_http();
 
-        // let resp = client.request(forwarded_req).await.expect("Failed to send request");
+        debug!("Forwarding request");
 
-        // debug!("Received response from target with status: {:?}", resp.status());
+        let resp = client.request(forwarded_req).await.expect("Failed to send request");
 
-        // return Ok(resp);
+        debug!("Received response from target with status: {:?}", resp.status());
+
+        // Getting a "server closed the stream without sending trailers" error from client with this
+        //let resp = BufferedResponse::from(resp).await.to();
+
+        // Getting a "server closed the stream without sending trailers" error from client with this
+        // let (parts, body) = resp.into_parts();
+        // let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+        // let resp = Response::from_parts(parts, Body::from(body_bytes));
+
+        return Ok(resp);
     }
 }
