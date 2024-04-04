@@ -59,8 +59,6 @@ impl<T: Body + ?Sized> Future for BufferBody<T> {
         loop {
             info!("Polling...");
 
-            //http_body_util::combinators::Collect
-
             let frame = futures_core::ready!(me.body.as_mut().poll_frame(cx));
 
             let frame = if let Some(frame) = frame {
@@ -74,27 +72,16 @@ impl<T: Body + ?Sized> Future for BufferBody<T> {
     }
 }
 
-//pub trait BufferedBodyExt: Body {
-
-    /// Turn this body into [`Collected`] body which will collect all the DATA frames
-    /// and trailers.
-    pub fn collect_buffered<T>(body: T) -> BufferBody<T>
-    where
-        T: Body,
-        T: Sized,
-    {
-        BufferBody {
-            body: body,
-            collected: Some(BufferedBody::default()),
-        }
+pub fn collect_buffered<T>(body: T) -> BufferBody<T>
+where
+    T: Body,
+    T: Sized,
+{
+    BufferBody {
+        body: body,
+        collected: Some(BufferedBody::default()),
     }
-//}
-
-pub struct BufVec<T>
-    where T: Buf {
-    vec: T,
 }
-
 
 #[derive(Debug, Default, Clone)]
 pub struct BufferedBody {
@@ -104,17 +91,10 @@ pub struct BufferedBody {
 
 impl BufferedBody {
     /// If there is a trailers frame buffered, returns a reference to it.
-    ///
     /// Returns `None` if the body contained no trailers.
     pub fn trailers(&self) -> Option<&HeaderMap> {
         self.trailers.as_ref()
-        //http_body_util::Collected
     }
-
-    // Convert this body into a [`Bytes`].
-    // pub fn to_bytes(mut self) -> Bytes {
-    //     self.bufs.copy_to_bytes(self.bufs.remaining())
-    // }
 
     pub(crate) fn push_frame<B>(&mut self, frame: Frame<B>)
         where B: Buf {
@@ -167,67 +147,6 @@ pub struct RisuServer {
     cache: ShardedCache<u128, Response<BufferedBody>>,
     //client: Client<HttpConnector>,
 }
-
-// #[derive(Debug, Clone)]
-// pub struct BufferedResponse {
-//     /// The response's status
-//     pub status: StatusCode,
-//     /// The response's version
-//     version: Version,
-//     /// The response's headers
-//     headers: HeaderMap<HeaderValue>,
-//     /// The response's body
-//     body: Bytes,
-// }
-
-/*
-impl BufferedResponse {
-    pub async fn from(response: Response<Body>) -> BufferedResponse {
-        
-        let (mut parts, body) = response.into_parts();
-        let collected: Collected<Bytes> = body.collect().await.unwrap();
-        let trailers = collected.trailers().unwrap();
-        for (k, v) in trailers.iter() {
-            parts.headers.insert(k, v.clone());
-        }
-
-        BufferedResponse {
-            status: parts.status,
-            version: parts.version,
-            headers: parts.headers,
-            body: collected.to_bytes(),
-        }
-    }
-
-    // pub async fn forward(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    //     let forwarded_request: Request<Body> = ...;
-    
-    //     let client = Client::builder().http2_only(true).build_http();
-    //     let response = client.request(forwarded_request).await.unwrap();
-    
-    //     let (parts, body) = response.into_parts();
-    //     let collected: Collected<Bytes> = body.collect().await.unwrap();
-    //     let response = Response::from_parts(parts, Body::from(collected)); // Error
-    
-    //     Ok(response)
-    // }
-
-    pub fn to(&self) -> Response<Body> {
-        let mut builder = Response::builder().status(self.status).version(self.version);
-
-        let headers = builder.headers_mut().expect("Failed to get headers");
-        headers.extend(self.headers.iter().map(|(k, v)| (k.clone(), v.clone())));
-
-        // let body = Bytes::from(self.body.clone());
-
-        // let stream = futures::stream::once(futures::future::ready(Ok::<_, std::io::Error>(body)));
-        // let body = Body::wrap_stream(stream);
-        //Body::wrap_stream(stream)
-
-        builder.body(Body::from(self.body.clone())).unwrap()
-    }
-}
-*/
 
 #[derive(Clone)]
 struct TokioExecutor;
@@ -297,86 +216,6 @@ impl RisuServer {
         }
     }
 
-    /*
-    pub async fn handle_request(server: Arc<Self>, request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-        debug!("Received request from {:?}", request.uri());
-
-        // Buffer request body so that we can hash it and forward it
-        let (parts, body) = request.into_parts();
-        debug!("Received headers: {:?}", parts);
-        let body_bytes: Bytes = hyper::body::to_bytes(body).await.unwrap();
-        let request_buffered = Request::from_parts(parts, body_bytes);
-
-        let key_factory = |request: &Request<Bytes>| {
-            // Hash request content
-            let mut hasher = GxHasher::with_seed(123);
-            request.uri().path().hash(&mut hasher);
-            request.uri().query().hash(&mut hasher);
-            request.body().hash(&mut hasher);
-            hasher.finish_u128()
-        };
-
-        // Round robin target
-        let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
-        let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
-
-        let client = &server.clone().client;
-
-        let value_factory = |request: Request<Bytes>| async move {
-            debug!("Cache miss");
-
-            let target_uri = Uri::builder()
-                .scheme("http")
-                .authority(target_address)
-                .path_and_query(request.uri().path_and_query().unwrap().clone())
-                .build()
-                .expect("Failed to build target URI");
-
-            // Copy path and query
-            let mut forwarded_req = Request::builder()
-                .method(request.method())
-                .uri(target_uri)
-                .version(request.version());
-
-            // Copy headers
-            let headers = forwarded_req.headers_mut().expect("Failed to get headers");
-            headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
-
-            // Copy body
-            let forwarded_req: Request<Bytes> = forwarded_req
-                .body(request.into_body())
-                .expect("Failed building request");
-
-            let forwarded_req: Request<Body> = forwarded_req.map(|bytes| Body::from(bytes));
-
-            debug!("Forwarding request");
-
-            let resp = client.request(forwarded_req).await.expect("Failed to send request");
-
-            // Buffer response body so that we can cache it and return it
-            let response_buffered = BufferedResponse::from(resp).await;
-
-            debug!("Received response from target with status: {:?}", response_buffered);
-
-            Ok(response_buffered)
-        };
-
-        let result: Result<Arc<BufferedResponse>, ()> = server
-            .cache
-            .get_or_add_from_item2(request_buffered, key_factory, value_factory)
-            .await;
-
-        match result {
-            Ok(response) => {
-                let response = response.to();
-                debug!("Received response from target with status: {:?}", response);
-                return Ok(response);
-            }
-            Err(_) => return Ok(Response::builder().status(500).body(Body::empty()).unwrap()),
-        }
-    }
-     */
-
     async fn hello(server: Arc<Self>, request: Request<hyper::body::Incoming>) -> Result<Response<BufferedBody>, Infallible> {
 
         let key_factory = |request: &Request<BufferedBody>| {
@@ -384,10 +223,7 @@ impl RisuServer {
             let mut hasher = GxHasher::with_seed(123);
             request.uri().path().hash(&mut hasher);
             request.uri().query().hash(&mut hasher);
-            //let k: &Collected<Bytes> = request.body();
-            //Full::new(k).hash(&mut hasher);
-            //let k = request.clone();
-            //k.to_bytes().hash(&mut hasher);
+            request.body().bufs.hash(&mut hasher); // Todo: Make this more seamless
             hasher.finish_u128()
         };
 
@@ -406,6 +242,7 @@ impl RisuServer {
                 .expect("Failed to build target URI");
     
             // Open a TCP connection to the remote host
+            // Todo: Connect and handshake only once and reuse the connection
             let stream = TcpStream::connect(target_address).await.expect("Connection failed");
 
             info!("Connected");
@@ -420,6 +257,7 @@ impl RisuServer {
             info!("Handshake completed");
 
             // Spawn a task to poll the connection, driving the HTTP state
+            // Todo: Is this necessary?
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
                     error!("Connection failed: {:?}", err);
@@ -442,7 +280,7 @@ impl RisuServer {
     
             // Copy body
             let forwarded_req = forwarded_req
-                .body(collect_buffered(body).await.unwrap())
+                .body(body)
                 .expect("Failed building request");
 
             debug!("Forwarding request");
@@ -460,8 +298,8 @@ impl RisuServer {
         };
 
         let (parts, body) = request.into_parts();
-        let collected = collect_buffered(body).await.unwrap();
-        let request = Request::from_parts(parts, collected);
+        let buffered_body = collect_buffered(body).await.unwrap();
+        let request = Request::from_parts(parts, buffered_body);
 
         let result: Result<Arc<Response<BufferedBody>>, ()> = server
             .cache
