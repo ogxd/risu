@@ -32,7 +32,7 @@ use http_body_util::Empty;
 
 pub struct RisuServer {
     configuration: RisuConfiguration,
-    cache: ShardedCache<u128, BufferedResponse>,
+    cache: ShardedCache<u128, Response<Collected<Bytes>>>,
     //client: Client<HttpConnector>,
 }
 
@@ -125,7 +125,7 @@ impl RisuServer {
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
-            cache: ShardedCache::<u128, BufferedResponse>::new(
+            cache: ShardedCache::<u128, Response<Collected<Bytes>>>::new(
                 configuration.in_memory_shards as usize,
                 configuration.cache_resident_size,
                 Duration::from_secs(600),
@@ -133,22 +133,6 @@ impl RisuServer {
             ),
             //client: Client::builder().http2_only(true).build_http(),
         });
-
-        //let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
-        
-
-        // let make_svc = make_service_fn(move |_conn| {
-        //     let server = server.clone();
-
-            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
-
-            // 10k QPS
-            // http_req_duration..............: avg=184.69ms min=0s       med=60.81ms max=3.09s  p(90)=404.11ms p(95)=808.66ms
-            // { expected_response:true }...: avg=174.64ms min=399µs    med=72.34ms max=1.73s  p(90)=404.11ms p(95)=593.5ms 
-            // http_req_failed................: 52.58% ✓ 18900       ✗ 17045 
-            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
-        //     async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::test(server.clone(), req))) }
-        // });
 
         let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
         info!("Listening on http://{}, http2:{}", addr, configuration.http2);
@@ -259,132 +243,95 @@ impl RisuServer {
             Err(_) => return Ok(Response::builder().status(500).body(Body::empty()).unwrap()),
         }
     }
-
-    pub async fn handle_request_no_caching(server: Arc<Self>, request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-        debug!("Received request from {:?}", request.uri());
-
-        let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
-        let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
-
-        let target_uri = Uri::builder()
-            .scheme("http")
-            .authority(target_address)
-            .path_and_query(request.uri().path_and_query().unwrap().clone())
-            .build()
-            .expect("Failed to build target URI");
-
-        // Copy path and query
-        let mut forwarded_req = Request::builder()
-            .method(request.method())
-            .uri(target_uri)
-            .version(request.version());
-
-        // Copy headers
-        let headers = forwarded_req.headers_mut().expect("Failed to get headers");
-        headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
-
-        // Copy body
-        let forwarded_req: Request<Body> = forwarded_req
-            .body(request.into_body())
-            .expect("Failed building request");
-
-        let forwarded_req: Request<Body> = forwarded_req.map(|bytes| Body::from(bytes));
-
-        let client = Client::builder().http2_only(true).build_http();
-
-        debug!("Forwarding request");
-
-        let resp = client.request(forwarded_req).await.expect("Failed to send request");
-
-        debug!("Received response from target with status: {:?}", resp.status());
-
-        // Getting a "server closed the stream without sending trailers" error from client with this
-        let resp = BufferedResponse::from(resp).await.to();
-
-        // Getting a "server closed the stream without sending trailers" error from client with this
-        // let (parts, body) = resp.into_parts();
-        // let body_bytes = hyper::body::to_bytes(body).await.unwrap();
-        // let resp = Response::from_parts(parts, Body::from(body_bytes));
-
-        return Ok(resp);
-    }
      */
 
     async fn hello(server: Arc<Self>, request: Request<hyper::body::Incoming>) -> Result<Response<Collected<Bytes>>, Infallible> {
 
-        warn!("Hello, World!");
+        let key_factory = |request: &Request<Collected<Bytes>>| {
+            // Hash request content
+            let mut hasher = GxHasher::with_seed(123);
+            request.uri().path().hash(&mut hasher);
+            request.uri().query().hash(&mut hasher);
+            //let k = request.clone();
+            //k.into_body().to_bytes().hash(&mut hasher);
+            hasher.finish_u128()
+        };
 
+        // Round robin target
         let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
         let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
 
-        let target_uri = Uri::builder()
-            .scheme("http")
-            .authority(target_address.clone())
-            .path_and_query(request.uri().path_and_query().unwrap().clone())
-            .build()
-            .expect("Failed to build target URI");
+        let value_factory = |request: Request<Collected<Bytes>>| async move {
+            info!("Cache miss");
 
-        // Open a TCP connection to the remote host
-        let stream = TcpStream::connect(target_address).await.expect("Connection failed");
+            let target_uri = Uri::builder()
+                .scheme("http")
+                .authority(target_address.clone())
+                .path_and_query(request.uri().path_and_query().unwrap().clone())
+                .build()
+                .expect("Failed to build target URI");
+    
+            // Open a TCP connection to the remote host
+            let stream = TcpStream::connect(target_address).await.expect("Connection failed");
+    
+            // Use an adapter to access something implementing `tokio::io` traits as if they implement
+            // `hyper::rt` IO traits.
+            let io = TokioIo::new(stream);
+    
+            // Create the Hyper client
+            let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io).await.expect("Handshake failed");
+    
+            // Spawn a task to poll the connection, driving the HTTP state
+            tokio::task::spawn(async move {
+                if let Err(err) = conn.await {
+                    error!("Connection failed: {:?}", err);
+                }
+            });
+    
+            // Copy path and query
+            let mut forwarded_req = Request::builder()
+                .method(request.method())
+                .uri(target_uri)
+                .version(request.version());
+       
+            // Copy headers
+            let headers = forwarded_req.headers_mut().expect("Failed to get headers");
+            headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+    
+            let body = request.into_body();
+    
+            // Copy body
+            let forwarded_req = forwarded_req
+                .body(body.collect().await.unwrap())
+                .expect("Failed building request");
 
-        // Use an adapter to access something implementing `tokio::io` traits as if they implement
-        // `hyper::rt` IO traits.
-        let io = TokioIo::new(stream);
+            debug!("Forwarding request");
 
-        // Create the Hyper client
-        let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io).await.expect("Handshake failed");
+            // Await the response...
+            let res: Response<Incoming> = sender.send_request(forwarded_req).await.expect("Failed to send request");
 
-        // Spawn a task to poll the connection, driving the HTTP state
-        tokio::task::spawn(async move {
-            if let Err(err) = conn.await {
-                error!("Connection failed: {:?}", err);
-            }
-        });
+            // Buffer response body so that we can cache it and return it
+            let (parts, body) = res.into_parts();
+            let collected = body.collect().await.unwrap();
 
-        // Copy path and query
-        let mut forwarded_req = Request::builder()
-            .method(request.method())
-            .uri(target_uri)
-            .version(request.version());
-   
-        // Copy headers
-        let headers = forwarded_req.headers_mut().expect("Failed to get headers");
-        headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+            debug!("Received response from target with status: {:?}", parts.status);
 
-        let body = request.into_body();
+            Ok(Response::from_parts(parts, collected))
+        };
 
-        // Copy body
-        let forwarded_req = forwarded_req
-            .body(body.collect().await.unwrap())
-            .expect("Failed building request");
-
-        // Await the response...
-        let res: Response<Incoming> = sender.send_request(forwarded_req).await.expect("Failed to send request");
-
-        info!("Response status: {}", res.status());
-
-        let (parts, body) = res.into_parts();
+        let (parts, body) = request.into_parts();
         let collected = body.collect().await.unwrap();
+        let request = Request::from_parts(parts, collected);
 
-        //info!("Body: {:?}", collected.to_bytes().len());
-        info!("Trailers: {:?}", collected.trailers());
+        let result: Result<Arc<Response<Collected<Bytes>>>, ()> = server
+            .cache
+            .get_or_add_from_item2(request, key_factory, value_factory)
+            .await;
 
-        //body
-        //let k = Body::from_parts(parts, body).await.map(|b| Response::new(Full::new(b)));
+        warn!("Hello, World!");
 
-        let x = Response::from_parts(parts, collected);
+        //info!("Response status: {}", res.status());
 
-        //let r = Response::new(Full::new(Bytes::from("Hello, World!")));
-
-        Ok(x)
-
-        //panic!();
-
-        //Ok(Response::new(Full::new(Bytes::from("Hello, World!"))))
+        Ok(Arc::try_unwrap(result.unwrap()).unwrap())
     }
-
-    // pub async fn test(server: Arc<Self>, request: Request<Body>) -> Result<Response<Full<Bytes>>, hyper::Error> {
-        
-    //     panic!();
-    // }
 }
