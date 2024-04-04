@@ -39,6 +39,8 @@ serde = "1.0.197"
 rand = "0.8.5"
 futures = { version = "0.3" }
 hyper-util = { version = "0.1", features = ["full"] }
+pin-project-lite = "0.2.14"
+futures-core = "0.3.30"
 
 [dev-dependencies]
 tonic = "0.11"
