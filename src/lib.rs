@@ -90,7 +90,7 @@ impl<T: Body + ?Sized> Future for BufferBody<T> {
     }
 //}
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BufferedBody {
     bufs: Bytes,
     trailers: Option<HeaderMap>,
@@ -465,10 +465,14 @@ impl RisuServer {
             .get_or_add_from_item2(request, key_factory, value_factory)
             .await;
 
-        warn!("Hello, World!");
-
-        //info!("Response status: {}", res.status());
-
-        Ok(Arc::try_unwrap(result.unwrap()).unwrap())
+        match result {
+            Ok(response) => {
+                let response = response.as_ref();
+                let response: Response<BufferedBody> = response.clone();
+                debug!("Received response from target with status: {:?}", response);
+                return Ok(response);
+            }
+            Err(_) => panic!(),
+        }
     }
 }
