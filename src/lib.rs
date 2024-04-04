@@ -5,7 +5,7 @@ mod caches;
 mod collections;
 pub mod config;
 
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BufMut, BytesMut};
 pub use caches::*;
 pub use collections::*;
 pub use config::RisuConfiguration;
@@ -90,9 +90,15 @@ impl<T: Body + ?Sized> Future for BufferBody<T> {
     }
 //}
 
+pub struct BufVec<T>
+    where T: Buf {
+    vec: T,
+}
+
+
 #[derive(Debug, Default, Clone)]
 pub struct BufferedBody {
-    bufs: Bytes,
+    bufs: BytesMut,
     trailers: Option<HeaderMap>,
 }
 
@@ -116,14 +122,11 @@ impl BufferedBody {
             Ok(mut data) => {
                 // Only push this frame if it has some data in it, to avoid crashing on
                 // `BufList::push`.
-                let mut vec = Vec::new();
-                vec.extend(self.bufs.clone()); // degueulasse
                 while data.has_remaining() {
                     // Append the data to the buffer.
-                    vec.extend(data.chunk());
+                    self.bufs.extend(data.chunk());
                     data.advance(data.remaining());
                 }
-                self.bufs = Bytes::copy_from_slice(vec.as_slice());
                 return;
             }
             Err(frame) => frame,
@@ -140,14 +143,14 @@ impl BufferedBody {
 }
 
 impl Body for BufferedBody {
-    type Data = Bytes;
+    type Data = BytesMut;
     type Error = Infallible;
 
     fn poll_frame(mut self: Pin<&mut Self>, _: &mut Context<'_>)
         -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        let frame = if self.bufs.len() > 0 {
+        let frame = if self.bufs.len() > 0 /* Shall we skip this frame if body is empty? */ {
             let frame = Frame::data(self.bufs.to_owned());
-            self.bufs = Bytes::new();
+            self.bufs.clear();
             frame
         } else if let Some(trailers) = self.trailers.take() {
             Frame::trailers(trailers)
