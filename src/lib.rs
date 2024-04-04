@@ -10,25 +10,30 @@ pub use caches::*;
 pub use collections::*;
 pub use config::RisuConfiguration;
 
+use futures::Future;
 use gxhash::GxHasher;
-use hyper::body::{Bytes, HttpBody, Sender};
-use hyper::client::HttpConnector;
+use http_body_util::{BodyExt, Collected, Full};
+use hyper::body::{Body, Bytes, Incoming};
+use hyper::rt::Executor;
+use hyper::server::conn::{http1, http2};
 use hyper::header::HeaderValue;
 use hyper::http::Uri;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Client, HeaderMap, Request, Response, Server, StatusCode, Version};
+use hyper::service::service_fn;
+use hyper::{Error, HeaderMap, Request, Response, StatusCode, Version};
+use hyper_util::rt::TokioIo;
 use rand::Rng;
+use tokio::net::{TcpListener, TcpStream};
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use http_body::{Collected, Full};
+use http_body_util::Empty;
 
 pub struct RisuServer {
     configuration: RisuConfiguration,
     cache: ShardedCache<u128, BufferedResponse>,
-    client: Client<HttpConnector>,
+    //client: Client<HttpConnector>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +48,7 @@ pub struct BufferedResponse {
     body: Bytes,
 }
 
+/*
 impl BufferedResponse {
     pub async fn from(response: Response<Body>) -> BufferedResponse {
         
@@ -89,20 +95,34 @@ impl BufferedResponse {
         builder.body(Body::from(self.body.clone())).unwrap()
     }
 }
+*/
+
+#[derive(Clone)]
+struct TokioExecutor;
+
+impl<F> Executor<F> for TokioExecutor
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    fn execute(&self, future: F) {
+        tokio::spawn(future);
+    }
+}
 
 impl RisuServer {
     pub async fn start_from_config_str(config_str: &str) {
         let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(config_str).unwrap();
-        RisuServer::start(configuration).await;
+        RisuServer::start(configuration).await.unwrap();
     }
 
     pub async fn start_from_config_file(config_file: &str) {
         let contents = std::fs::read_to_string(config_file).expect("Should have been able to read the file");
         let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents).unwrap();
-        RisuServer::start(configuration).await;
+        RisuServer::start(configuration).await.unwrap();
     }
 
-    pub async fn start(configuration: RisuConfiguration) {
+    pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
             cache: ShardedCache::<u128, BufferedResponse>::new(
@@ -111,14 +131,14 @@ impl RisuServer {
                 Duration::from_secs(600),
                 lru::ExpirationType::Absolute,
             ),
-            client: Client::builder().http2_only(true).build_http(),
+            //client: Client::builder().http2_only(true).build_http(),
         });
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
-        info!("Listening on http://{}, http2:{}", addr, configuration.http2);
+        //let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
+        
 
-        let make_svc = make_service_fn(move |_conn| {
-            let server = server.clone();
+        // let make_svc = make_service_fn(move |_conn| {
+        //     let server = server.clone();
 
             //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
 
@@ -127,16 +147,41 @@ impl RisuServer {
             // { expected_response:true }...: avg=174.64ms min=399µs    med=72.34ms max=1.73s  p(90)=404.11ms p(95)=593.5ms 
             // http_req_failed................: 52.58% ✓ 18900       ✗ 17045 
             //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
-            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::test(server.clone(), req))) }
-        });
+        //     async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::test(server.clone(), req))) }
+        // });
 
-        Server::bind(&addr)
-            .http2_only(configuration.http2)
-            .serve(make_svc)
-            .await
-            .expect("Failed starting server");
+        let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
+        info!("Listening on http://{}, http2:{}", addr, configuration.http2);
+
+        // We create a TcpListener and bind it to 127.0.0.1:3000
+        let listener = TcpListener::bind(addr).await?;
+        
+        // We start a loop to continuously accept incoming connections
+        loop {
+            let (stream, _) = listener.accept().await?;
+    
+            // Use an adapter to access something implementing `tokio::io` traits as if they implement
+            // `hyper::rt` IO traits.
+            let io = TokioIo::new(stream);
+    
+            let server = server.clone();
+
+            // Spawn a tokio task to serve multiple connections concurrently
+            tokio::task::spawn(async move {
+                let server = server.clone();
+                // Finally, we bind the incoming connection to our `hello` service
+                if let Err(err) = http2::Builder::new(TokioExecutor)
+                    // `service_fn` converts our function in a `Service`
+                    .serve_connection(io, service_fn(move |req| RisuServer::hello(server.clone(), req)))
+                    .await
+                {
+                    eprintln!("Error serving connection: {:?}", err);
+                }
+            });
+        }
     }
 
+    /*
     pub async fn handle_request(server: Arc<Self>, request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         debug!("Received request from {:?}", request.uri());
 
@@ -263,9 +308,83 @@ impl RisuServer {
 
         return Ok(resp);
     }
+     */
 
-    pub async fn test(server: Arc<Self>, request: Request<Body>) -> Result<Response<Full<Bytes>>, hyper::Error> {
-        
-        panic!();
+    async fn hello(server: Arc<Self>, request: Request<hyper::body::Incoming>) -> Result<Response<Collected<Bytes>>, Infallible> {
+
+        warn!("Hello, World!");
+
+        let random_number = rand::thread_rng().gen_range(0..server.configuration.target_addresses.len());
+        let target_address = server.configuration.target_addresses[random_number].clone(); // Todo: Avoid cloning on every request
+
+        let target_uri = Uri::builder()
+            .scheme("http")
+            .authority(target_address.clone())
+            .path_and_query(request.uri().path_and_query().unwrap().clone())
+            .build()
+            .expect("Failed to build target URI");
+
+        // Open a TCP connection to the remote host
+        let stream = TcpStream::connect(target_address).await.expect("Connection failed");
+
+        // Use an adapter to access something implementing `tokio::io` traits as if they implement
+        // `hyper::rt` IO traits.
+        let io = TokioIo::new(stream);
+
+        // Create the Hyper client
+        let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io).await.expect("Handshake failed");
+
+        // Spawn a task to poll the connection, driving the HTTP state
+        tokio::task::spawn(async move {
+            if let Err(err) = conn.await {
+                error!("Connection failed: {:?}", err);
+            }
+        });
+
+        // Copy path and query
+        let mut forwarded_req = Request::builder()
+            .method(request.method())
+            .uri(target_uri)
+            .version(request.version());
+   
+        // Copy headers
+        let headers = forwarded_req.headers_mut().expect("Failed to get headers");
+        headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
+
+        let body = request.into_body();
+
+        // Copy body
+        let forwarded_req = forwarded_req
+            .body(body.collect().await.unwrap())
+            .expect("Failed building request");
+
+        // Await the response...
+        let res: Response<Incoming> = sender.send_request(forwarded_req).await.expect("Failed to send request");
+
+        info!("Response status: {}", res.status());
+
+        let (parts, body) = res.into_parts();
+        let collected = body.collect().await.unwrap();
+
+        //info!("Body: {:?}", collected.to_bytes().len());
+        info!("Trailers: {:?}", collected.trailers());
+
+        //body
+        //let k = Body::from_parts(parts, body).await.map(|b| Response::new(Full::new(b)));
+
+        let x = Response::from_parts(parts, collected);
+
+        //let r = Response::new(Full::new(Bytes::from("Hello, World!")));
+
+        Ok(x)
+
+        //panic!();
+
+        //Ok(Response::new(Full::new(Bytes::from("Hello, World!"))))
     }
+
+    // pub async fn test(server: Arc<Self>, request: Request<Body>) -> Result<Response<Full<Bytes>>, hyper::Error> {
+        
+    //     panic!();
+    // }
 }

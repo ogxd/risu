@@ -1,6 +1,6 @@
 use std::{convert::Infallible, net::SocketAddr};
 
-use hyper::{service::{make_service_fn, service_fn}, Body, Request, Response, Server};
+use hyper::{service::{service_fn}, Request, Response};
 use risu::{self, RisuServer};
 use simplelog::*;
 use tokio::sync::oneshot;
@@ -11,10 +11,11 @@ pub struct TestServer {
 }
 
 async fn hello_handler(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
-    let response_body = format!("hello {}", body_str);
-    Ok(Response::new(Body::from(response_body)))
+    // let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+    // let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
+    // let response_body = format!("hello {}", body_str);
+    // Ok(Response::new(Body::from(response_body)))
+    panic!();
 }
 
 impl TestServer {
