@@ -8,21 +8,21 @@ export const options = {
       executor: 'ramping-arrival-rate',
 
       // Start iterations per `timeUnit`
-      startRate: 500,
+      startRate: 1000,
 
       // Start `startRate` iterations per minute
-      timeUnit: '10s',
+      timeUnit: '1s',
 
       // Pre-allocate necessary VUs.
-      preAllocatedVUs: 50,
+      preAllocatedVUs: 1000,
 
       stages: [
-        { target: 1000, duration: '10s' },
-        { target: 2000, duration: '10s' },
-        { target: 5000, duration: '10s' },
-        { target: 10000, duration: '10s' },
-        { target: 20000, duration: '10s' },
-        { target: 50000, duration: '10s' },
+        { target: 20000, duration: '1s' },
+        // { target: 2000, duration: '10s' },
+        // { target: 5000, duration: '10s' },
+        // { target: 10000, duration: '10s' },
+        // { target: 20000, duration: '10s' },
+        { target: 20000, duration: '20s' },
       ],
     },
   },

@@ -5,12 +5,13 @@ mod caches;
 mod collections;
 pub mod config;
 
+use bytes::BufMut;
 pub use caches::*;
 pub use collections::*;
 pub use config::RisuConfiguration;
 
 use gxhash::GxHasher;
-use hyper::body::{Bytes, HttpBody};
+use hyper::body::{Bytes, HttpBody, Sender};
 use hyper::client::HttpConnector;
 use hyper::header::HeaderValue;
 use hyper::http::Uri;
@@ -22,6 +23,7 @@ use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use http_body::{Collected, Full};
 
 pub struct RisuServer {
     configuration: RisuConfiguration,
@@ -38,24 +40,51 @@ pub struct BufferedResponse {
     /// The response's headers
     headers: HeaderMap<HeaderValue>,
     /// The response's body
-    body: hyper::body::Bytes,
+    body: Bytes,
 }
 
 impl BufferedResponse {
     pub async fn from(response: Response<Body>) -> BufferedResponse {
-        let (parts, body) = response.into_parts();
+        
+        let (mut parts, body) = response.into_parts();
+        let collected: Collected<Bytes> = body.collect().await.unwrap();
+        let trailers = collected.trailers().unwrap();
+        for (k, v) in trailers.iter() {
+            parts.headers.insert(k, v.clone());
+        }
+
         BufferedResponse {
             status: parts.status,
             version: parts.version,
             headers: parts.headers,
-            body: hyper::body::to_bytes(body).await.unwrap(),
+            body: collected.to_bytes(),
         }
     }
+
+    // pub async fn forward(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    //     let forwarded_request: Request<Body> = ...;
+    
+    //     let client = Client::builder().http2_only(true).build_http();
+    //     let response = client.request(forwarded_request).await.unwrap();
+    
+    //     let (parts, body) = response.into_parts();
+    //     let collected: Collected<Bytes> = body.collect().await.unwrap();
+    //     let response = Response::from_parts(parts, Body::from(collected)); // Error
+    
+    //     Ok(response)
+    // }
+
     pub fn to(&self) -> Response<Body> {
         let mut builder = Response::builder().status(self.status).version(self.version);
 
         let headers = builder.headers_mut().expect("Failed to get headers");
         headers.extend(self.headers.iter().map(|(k, v)| (k.clone(), v.clone())));
+
+        // let body = Bytes::from(self.body.clone());
+
+        // let stream = futures::stream::once(futures::future::ready(Ok::<_, std::io::Error>(body)));
+        // let body = Body::wrap_stream(stream);
+        //Body::wrap_stream(stream)
 
         builder.body(Body::from(self.body.clone())).unwrap()
     }
@@ -90,8 +119,15 @@ impl RisuServer {
 
         let make_svc = make_service_fn(move |_conn| {
             let server = server.clone();
+
             //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request(server.clone(), req))) }
-            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
+
+            // 10k QPS
+            // http_req_duration..............: avg=184.69ms min=0s       med=60.81ms max=3.09s  p(90)=404.11ms p(95)=808.66ms
+            // { expected_response:true }...: avg=174.64ms min=399µs    med=72.34ms max=1.73s  p(90)=404.11ms p(95)=593.5ms 
+            // http_req_failed................: 52.58% ✓ 18900       ✗ 17045 
+            //async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::handle_request_no_caching(server.clone(), req))) }
+            async move { Ok::<_, Infallible>(service_fn(move |req| RisuServer::test(server.clone(), req))) }
         });
 
         Server::bind(&addr)
@@ -106,6 +142,7 @@ impl RisuServer {
 
         // Buffer request body so that we can hash it and forward it
         let (parts, body) = request.into_parts();
+        debug!("Received headers: {:?}", parts);
         let body_bytes: Bytes = hyper::body::to_bytes(body).await.unwrap();
         let request_buffered = Request::from_parts(parts, body_bytes);
 
@@ -217,7 +254,7 @@ impl RisuServer {
         debug!("Received response from target with status: {:?}", resp.status());
 
         // Getting a "server closed the stream without sending trailers" error from client with this
-        //let resp = BufferedResponse::from(resp).await.to();
+        let resp = BufferedResponse::from(resp).await.to();
 
         // Getting a "server closed the stream without sending trailers" error from client with this
         // let (parts, body) = resp.into_parts();
@@ -225,5 +262,10 @@ impl RisuServer {
         // let resp = Response::from_parts(parts, Body::from(body_bytes));
 
         return Ok(resp);
+    }
+
+    pub async fn test(server: Arc<Self>, request: Request<Body>) -> Result<Response<Full<Bytes>>, hyper::Error> {
+        
+        panic!();
     }
 }

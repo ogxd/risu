@@ -38,5 +38,5 @@ fn default_target_addresses() -> Vec<String> {
     vec!["127.0.0.1:3002".into()]
 }
 fn default_http2() -> bool {
-    false
+    true
 }
