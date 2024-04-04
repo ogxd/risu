@@ -5,7 +5,7 @@ mod caches;
 mod collections;
 pub mod config;
 
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 pub use caches::*;
 pub use collections::*;
 pub use config::RisuConfiguration;
@@ -39,21 +39,28 @@ pin_project! {
     /// Future that resolves into a [`Collected`].
     ///
     /// [`Collected`]: crate::Collected
-    pub struct BufferBody
+    pub struct BufferBody<T>
+    where
+        T: Body,
+        T: ?Sized,
     {
         pub(crate) collected: Option<BufferedBody>,
         #[pin]
-        pub(crate) body: Full<Bytes>,
+        pub(crate) body: T,
     }
 }
 
-impl Future for BufferBody {
-    type Output = Result<BufferedBody, std::io::Error>;
+impl<T: Body + ?Sized> Future for BufferBody<T> {
+    type Output = Result<BufferedBody, T::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
         let mut me = self.project();
 
         loop {
+            info!("Polling...");
+
+            //http_body_util::combinators::Collect
+
             let frame = futures_core::ready!(me.body.as_mut().poll_frame(cx));
 
             let frame = if let Some(frame) = frame {
@@ -67,22 +74,23 @@ impl Future for BufferBody {
     }
 }
 
-pub trait BufferedBodyExt: Body {
+//pub trait BufferedBodyExt: Body {
 
     /// Turn this body into [`Collected`] body which will collect all the DATA frames
     /// and trailers.
-    fn collect(self) -> combinators::Collect<Self>
+    pub fn collect_buffered<T>(body: T) -> BufferBody<T>
     where
-        Self: Sized,
+        T: Body,
+        T: Sized,
     {
-        combinators::Collect {
-            body: self,
-            collected: Some(crate::Collected::default()),
+        BufferBody {
+            body: body,
+            collected: Some(BufferedBody::default()),
         }
     }
-}
+//}
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BufferedBody {
     bufs: Bytes,
     trailers: Option<HeaderMap>,
@@ -94,6 +102,7 @@ impl BufferedBody {
     /// Returns `None` if the body contained no trailers.
     pub fn trailers(&self) -> Option<&HeaderMap> {
         self.trailers.as_ref()
+        //http_body_util::Collected
     }
 
     // Convert this body into a [`Bytes`].
@@ -101,27 +110,33 @@ impl BufferedBody {
     //     self.bufs.copy_to_bytes(self.bufs.remaining())
     // }
 
-    // pub(crate) fn push_frame(&mut self, frame: Frame<Bytes>) {
-    //     let frame = match frame.into_data() {
-    //         Ok(data) => {
-    //             // Only push this frame if it has some data in it, to avoid crashing on
-    //             // `BufList::push`.
-    //             if data.has_remaining() {
-    //                 self.bufs.push(data);
-    //             }
-    //             return;
-    //         }
-    //         Err(frame) => frame,
-    //     };
+    pub(crate) fn push_frame<B>(&mut self, frame: Frame<B>)
+        where B: Buf {
+        let frame = match frame.into_data() {
+            Ok(mut data) => {
+                // Only push this frame if it has some data in it, to avoid crashing on
+                // `BufList::push`.
+                let mut vec = Vec::new();
+                vec.extend(self.bufs.clone()); // degueulasse
+                while data.has_remaining() {
+                    // Append the data to the buffer.
+                    vec.extend(data.chunk());
+                    data.advance(data.remaining());
+                }
+                self.bufs = Bytes::copy_from_slice(vec.as_slice());
+                return;
+            }
+            Err(frame) => frame,
+        };
 
-    //     if let Ok(trailers) = frame.into_trailers() {
-    //         if let Some(current) = &mut self.trailers {
-    //             current.extend(trailers);
-    //         } else {
-    //             self.trailers = Some(trailers);
-    //         }
-    //     };
-    // }
+        if let Ok(trailers) = frame.into_trailers() {
+            if let Some(current) = &mut self.trailers {
+                current.extend(trailers);
+            } else {
+                self.trailers = Some(trailers);
+            }
+        };
+    }
 }
 
 impl Body for BufferedBody {
@@ -131,7 +146,9 @@ impl Body for BufferedBody {
     fn poll_frame(mut self: Pin<&mut Self>, _: &mut Context<'_>)
         -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let frame = if self.bufs.len() > 0 {
-            Frame::data(self.bufs.to_owned())
+            let frame = Frame::data(self.bufs.to_owned());
+            self.bufs = Bytes::new();
+            frame
         } else if let Some(trailers) = self.trailers.take() {
             Frame::trailers(trailers)
         } else {
@@ -387,6 +404,8 @@ impl RisuServer {
     
             // Open a TCP connection to the remote host
             let stream = TcpStream::connect(target_address).await.expect("Connection failed");
+
+            info!("Connected");
     
             // Use an adapter to access something implementing `tokio::io` traits as if they implement
             // `hyper::rt` IO traits.
@@ -395,6 +414,8 @@ impl RisuServer {
             // Create the Hyper client
             let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io).await.expect("Handshake failed");
     
+            info!("Handshake completed");
+
             // Spawn a task to poll the connection, driving the HTTP state
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
@@ -413,10 +434,12 @@ impl RisuServer {
             headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
     
             let body = request.into_body();
+
+            info!("Buffering request...");
     
             // Copy body
             let forwarded_req = forwarded_req
-                .body(body.collect().await.unwrap())
+                .body(collect_buffered(body).await.unwrap())
                 .expect("Failed building request");
 
             debug!("Forwarding request");
@@ -426,7 +449,7 @@ impl RisuServer {
 
             // Buffer response body so that we can cache it and return it
             let (parts, body) = res.into_parts();
-            let collected = body.collect().await.unwrap();
+            let collected = collect_buffered(body).await.unwrap();
 
             debug!("Received response from target with status: {:?}", parts.status);
 
@@ -434,7 +457,7 @@ impl RisuServer {
         };
 
         let (parts, body) = request.into_parts();
-        let collected = body.collect().await.unwrap();
+        let collected = collect_buffered(body).await.unwrap();
         let request = Request::from_parts(parts, collected);
 
         let result: Result<Arc<Response<BufferedBody>>, ()> = server
