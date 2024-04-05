@@ -40,3 +40,26 @@ fn default_target_addresses() -> Vec<String> {
 fn default_http2() -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_deserialization() {
+        let conf = "in_memory_shards: 42\n\
+                    cache_resident_size: 123\n\
+                    cache_probatory_size: 456\n\
+                    listening_port: 789\n\
+                    target_addresses: [ 1.2.3.4:1234, 5.6.7.8:5678 ]\n\
+                    http2: false";
+
+        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(conf).unwrap();
+        
+        assert_eq!(configuration.in_memory_shards, 42);
+        assert_eq!(configuration.cache_resident_size, 123);
+        assert_eq!(configuration.cache_probatory_size, 456);
+        assert_eq!(configuration.listening_port, 789);
+        assert_eq!(configuration.target_addresses, vec!["1.2.3.4:1234", "5.6.7.8:5678"]);
+    }
+}

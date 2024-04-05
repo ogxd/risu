@@ -5,7 +5,7 @@ use risu::RisuServer;
 #[tokio::main]
 async fn main() {
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Debug,
+        LevelFilter::Warn,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
