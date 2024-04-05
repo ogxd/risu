@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::collections::LinkedList;
 use risu::ArenaLinkedList;
+use std::collections::LinkedList;
 
 fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group(format!("ArenaLinkedList"));

@@ -1,6 +1,6 @@
 use std::{convert::Infallible, net::SocketAddr};
 
-use hyper::{service::{service_fn}, Request, Response};
+use hyper::{service::service_fn, Request, Response};
 use risu::{self, RisuServer};
 use simplelog::*;
 use tokio::sync::oneshot;
@@ -23,9 +23,7 @@ impl TestServer {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let server_handle = tokio::spawn(async move {
             let addr = SocketAddr::from(([127, 0, 0, 1], 3002));
-            let make_svc = make_service_fn(|_conn| async {
-                Ok::<_, Infallible>(service_fn(hello_handler))
-            });
+            let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(hello_handler)) });
             let server = Server::bind(&addr).serve(make_svc);
             tokio::select! {
                 _ = server => {},
