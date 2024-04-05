@@ -18,7 +18,7 @@ use hyper::rt::Executor;
 use hyper::server::conn::{http1, http2};
 use hyper::header::HeaderValue;
 use hyper::http::Uri;
-use hyper::service::service_fn;
+use hyper::service::{service_fn, Service};
 use hyper::{Error, HeaderMap, Request, Response, StatusCode, Version};
 use hyper_util::rt::TokioIo;
 use rand::Rng;
@@ -142,9 +142,10 @@ impl Body for BufferedBody {
     }
 }
 
+#[derive(Clone)]
 pub struct RisuServer {
     configuration: RisuConfiguration,
-    cache: ShardedCache<u128, Response<BufferedBody>>,
+    cache: Arc<ShardedCache<u128, Response<BufferedBody>>>,
     //client: Client<HttpConnector>,
 }
 
@@ -174,16 +175,16 @@ impl RisuServer {
     }
 
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
-        let server = Arc::new(RisuServer {
+        let server = RisuServer {
             configuration: configuration.clone(),
-            cache: ShardedCache::<u128, Response<BufferedBody>>::new(
+            cache: Arc::new(ShardedCache::<u128, Response<BufferedBody>>::new(
                 configuration.in_memory_shards as usize,
                 configuration.cache_resident_size,
                 Duration::from_secs(600),
                 lru::ExpirationType::Absolute,
-            ),
+            )),
             //client: Client::builder().http2_only(true).build_http(),
-        });
+        };
 
         let addr = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
         info!("Listening on http://{}, http2:{}", addr, configuration.http2);
@@ -194,29 +195,35 @@ impl RisuServer {
         // We start a loop to continuously accept incoming connections
         loop {
             let (stream, _) = listener.accept().await?;
-    
             // Use an adapter to access something implementing `tokio::io` traits as if they implement
             // `hyper::rt` IO traits.
             let io = TokioIo::new(stream);
-    
             let server = server.clone();
-
-            // Spawn a tokio task to serve multiple connections concurrently
             tokio::task::spawn(async move {
-                let server = server.clone();
-                // Finally, we bind the incoming connection to our `hello` service
                 if let Err(err) = http2::Builder::new(TokioExecutor)
-                    // `service_fn` converts our function in a `Service`
-                    .serve_connection(io, service_fn(move |req| RisuServer::hello(server.clone(), req)))
-                    .await
-                {
-                    println!("Error serving connection: {:?}", err);
+                    .serve_connection(io, server).await {
+                    println!("Failed to serve connection: {:?}", err);
                 }
             });
         }
     }
+}
 
-    async fn hello(server: Arc<Self>, request: Request<hyper::body::Incoming>) -> Result<Response<BufferedBody>, Infallible> {
+impl Service<Request<Incoming>> for RisuServer {
+    type Response = Response<BufferedBody>;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>; // Wrong type
+
+    fn call(&self, request: Request<Incoming>) -> Self::Future {
+        let this = self.clone();
+        Box::pin(async move { this.call_async(request).await })
+    }
+}
+
+impl RisuServer {
+    pub async fn call_async(&self, request: Request<Incoming>) -> Result<Response<BufferedBody>, Infallible> {
+
+        let server = self.clone();
 
         let key_factory = |request: &Request<BufferedBody>| {
             // Hash request content
