@@ -1,0 +1,42 @@
+name: 'On Version Tag'
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+
+  check:
+    name: Check Branch
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Check Branch
+      run: |
+        git fetch
+        BRANCH_NAME=$(git branch -r --contains ${{ github.ref_name }} --format='%(refname:short)')
+        BRANCH_NAME=${BRANCH_NAME#*/}
+        if [[ "${BRANCH_NAME}" != "master" ]]; then
+          echo "This workflow can only be triggered from master branch."
+          exit 1
+        fi
+
+  push-docker:
+    name: Push Docker
+    needs: [check]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Docker Login
+        shell: bash
+        run: echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+
+      - name: Docker Build
+        shell: bash
+        run: docker build -f src/Dockerfile -t ghcr.io/ogxd/risu:latest -t ghcr.io/ogxd/risu:${{ github.ref_name }} .
+
+      - name: Docker Push
+        shell: bash
+        run: docker push --all-tags ghcr.io/ogxd/risu
