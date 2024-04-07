@@ -6,6 +6,7 @@ mod caches;
 mod collections;
 pub mod config;
 mod executor;
+mod metrics;
 
 use buffered_body::BufferedBody;
 pub use caches::*;
@@ -21,53 +22,13 @@ use hyper::server::conn::{http1, http2};
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
+use metrics::Metrics;
 use rand::Rng;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
-
-use prometheus::{Counter, Encoder, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
-
-pub struct Metrics {
-    response_time: Histogram,
-    cache_calls: Counter,
-    // cache_hits: Counter,
-    cache_misses: Counter,
-    // cache_evictions: Counter,
-    // cache_resident_size: Counter,
-    // cache_probatory_size: Counter,
-    registry: Registry,
-}
-
-impl Metrics {
-    pub fn new() -> Metrics {
-        let metrics = Metrics {
-            response_time: Histogram::with_opts(HistogramOpts::new("response_time", "Response time").buckets(vec![
-                0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1., 2., 5., 10., 20., 50., 100., 200., 500., 1000., 2000., 5000.,
-                10000.,
-            ]))
-            .unwrap(),
-            cache_calls: Counter::with_opts(Opts::new("cache_calls", "Number of cache calls")).unwrap(),
-            cache_misses: Counter::with_opts(Opts::new("cache_misses", "Number of cache misses")).unwrap(),
-            registry: Registry::new(),
-        };
-        metrics
-            .registry
-            .register(Box::new(metrics.response_time.clone()))
-            .unwrap();
-        metrics
-            .registry
-            .register(Box::new(metrics.cache_calls.clone()))
-            .unwrap();
-        metrics
-            .registry
-            .register(Box::new(metrics.cache_misses.clone()))
-            .unwrap();
-        metrics
-    }
-}
 
 pub struct RisuServer {
     configuration: RisuConfiguration,
@@ -156,14 +117,9 @@ impl RisuServer {
     }
 
     pub async fn prometheus(
-        server: Arc<RisuServer>, request: Request<hyper::body::Incoming>,
+        server: Arc<RisuServer>, _: Request<hyper::body::Incoming>,
     ) -> Result<Response<BufferedBody>, hyper::Error> {
-        let mut buffer = vec![];
-        let encoder = TextEncoder::new();
-        let metric_families = server.metrics.registry.gather();
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-
-        Ok(Response::new(BufferedBody::from_bytes(&buffer)))
+        Ok(Response::new(BufferedBody::from_bytes(&server.metrics.encode())))
     }
 
     pub async fn call_async(
