@@ -19,6 +19,9 @@ pub struct RisuConfiguration {
 
     #[serde(default = "default_http2")]
     pub http2: bool,
+
+    #[serde(default = "default_prometheus_port")]
+    pub prometheus_port: u16,
 }
 
 // https://github.com/serde-rs/serde/issues/368 🙄
@@ -40,6 +43,9 @@ fn default_target_addresses() -> Vec<String> {
 fn default_http2() -> bool {
     true
 }
+fn default_prometheus_port() -> u16 {
+    8000
+}
 
 #[cfg(test)]
 mod tests {
@@ -55,7 +61,7 @@ mod tests {
                     http2: false";
 
         let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(conf).unwrap();
-        
+
         assert_eq!(configuration.in_memory_shards, 42);
         assert_eq!(configuration.cache_resident_size, 123);
         assert_eq!(configuration.cache_probatory_size, 456);

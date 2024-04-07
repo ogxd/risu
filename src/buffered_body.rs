@@ -97,6 +97,12 @@ impl BufferedBody {
             collected: Some(BufferedBody::default()),
         }
     }
+
+    pub fn from_bytes(b: &[u8]) -> BufferedBody {
+        let mut bufs = BytesMut::new();
+        bufs.extend(b);
+        BufferedBody { bufs, trailers: None }
+    }
 }
 
 impl Body for BufferedBody {

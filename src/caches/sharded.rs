@@ -53,14 +53,14 @@ where
         &self.shards[shard]
     }
 
-    pub async fn get_or_add_from_item2<I, Kfac, Vfac, Fut>(
+    pub async fn get_or_add_from_item2<I, Kfac, Vfac, Fut, E>(
         &self, item: I, key_factory: Kfac, value_factory: Vfac,
-    ) -> Result<Arc<V>, ()>
+    ) -> Result<Arc<V>, E>
     where
         K: Clone,
         Kfac: Fn(&I) -> K,
         Vfac: FnOnce(I) -> Fut,
-        Fut: Future<Output = Result<V, ()>>,
+        Fut: Future<Output = Result<V, E>>,
     {
         let key = key_factory(&item);
         match self.try_get2(&key) {
@@ -74,7 +74,7 @@ where
                         self.try_add_arc2(key.clone(), a_value.clone());
                         Ok(a_value)
                     }
-                    Err(()) => Err(()),
+                    Err(e) => Err(e),
                 }
             }
         }
