@@ -11,8 +11,8 @@ env:
   RUSTFLAGS: "-C target-feature=+aes"
 
 jobs:
-  build:
 
+  build:
     name: Build & Test
     runs-on: ubuntu-latest
 
