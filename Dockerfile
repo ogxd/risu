@@ -1,4 +1,5 @@
 FROM rust:1.77-alpine3.19 as builder
+RUN apk add --no-cache musl-dev
 
 WORKDIR /usr/src/risu
 COPY . .
