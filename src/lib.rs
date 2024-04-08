@@ -39,13 +39,16 @@ pub struct RisuServer {
 
 impl RisuServer {
     pub async fn start_from_config_str(config_str: &str) {
-        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(config_str).unwrap();
+        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(config_str)
+            .expect("Could not parse configuration file");
         RisuServer::start(configuration).await.unwrap();
     }
 
     pub async fn start_from_config_file(config_file: &str) {
-        let contents = std::fs::read_to_string(config_file).expect("Should have been able to read the file");
-        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents).unwrap();
+        let contents = std::fs::read_to_string(config_file)
+            .expect("Could not find configuration file");
+        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents)
+            .expect("Could not parse configuration file");
         RisuServer::start(configuration).await.unwrap();
     }
 

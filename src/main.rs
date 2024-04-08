@@ -12,5 +12,5 @@ async fn main() {
     )])
     .unwrap();
 
-    RisuServer::start_from_config_file("config.yaml").await;
+    RisuServer::start_from_config_file("config/config.yaml").await;
 }
