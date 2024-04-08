@@ -1,11 +1,11 @@
-FROM rust:1.77-slim-buster as builder
+FROM rust:1.77-alpine3.19 as builder
 
 WORKDIR /usr/src/risu
 COPY . .
 
 RUN RUSTFLAGS="-C target-feature=+aes" cargo install --path .
 
-FROM debian:buster-slim
+FROM alpine:3.19
 
 COPY --from=builder /usr/local/cargo/bin/risu /usr/local/bin/risu
 
