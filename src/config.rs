@@ -22,6 +22,9 @@ pub struct RisuConfiguration {
 
     #[serde(default = "default_prometheus_port")]
     pub prometheus_port: u16,
+
+    #[serde(default = "default_healthcheck_port")]
+    pub healthcheck_port: u16,
 }
 
 // https://github.com/serde-rs/serde/issues/368 🙄
@@ -45,6 +48,9 @@ fn default_http2() -> bool {
 }
 fn default_prometheus_port() -> u16 {
     8000
+}
+fn default_healthcheck_port() -> u16 {
+    8001
 }
 
 #[cfg(test)]

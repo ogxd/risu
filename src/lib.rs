@@ -14,7 +14,7 @@ pub use collections::*;
 pub use config::RisuConfiguration;
 use executor::TokioExecutor;
 
-use futures::future::join;
+use futures::join;
 use gxhash::GxHasher;
 use hyper::body::Incoming;
 use hyper::http::Uri;
@@ -45,6 +45,7 @@ impl RisuServer {
     }
 
     pub async fn start_from_config_file(config_file: &str) {
+        info!("Reading configuration from file: {}", config_file);
         let contents = std::fs::read_to_string(config_file)
             .expect("Could not find configuration file");
         let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents)
@@ -53,6 +54,7 @@ impl RisuServer {
     }
 
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
+        info!("Starting Risu server...");
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
             cache: ShardedCache::<u128, Response<BufferedBody>>::new(
@@ -67,10 +69,7 @@ impl RisuServer {
 
         let service = async {
             let service_address = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
-            info!(
-                "Service listening on http://{}, http2:{}",
-                service_address, configuration.http2
-            );
+            info!("Service listening on http://{}, http2:{}", service_address, configuration.http2);
 
             let listener = TcpListener::bind(service_address).await.unwrap();
 
@@ -94,7 +93,7 @@ impl RisuServer {
         };
 
         let prometheus = async {
-            let prom_address: SocketAddr = ([127, 0, 0, 1], server.configuration.prometheus_port).into();
+            let prom_address: SocketAddr = ([0, 0, 0, 0], server.configuration.prometheus_port).into();
             info!("Prometheus listening on http://{}", prom_address);
             let listener = TcpListener::bind(prom_address).await.unwrap();
 
@@ -114,9 +113,33 @@ impl RisuServer {
             }
         };
 
-        _ = join(service, prometheus).await;
+        let healthcheck = async {
+            let health_address: SocketAddr = ([0, 0, 0, 0], server.configuration.healthcheck_port).into();
+            info!("Healthcheck listening on http://{}", health_address);
+            let listener = TcpListener::bind(health_address).await.unwrap();
+
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+                let io = TokioIo::new(stream);
+                tokio::task::spawn(async move {
+                    //let server = server.clone();
+                    if let Err(err) = http1::Builder::new()
+                        .serve_connection(io, service_fn(|req| RisuServer::healthcheck(req)))
+                        .await
+                    {
+                        warn!("Error serving healthcheck connection: {:?}", err);
+                    }
+                });
+            }
+        };
+
+        join!(service, prometheus, healthcheck);
 
         Ok(())
+    }
+
+    pub async fn healthcheck(_req: Request<hyper::body::Incoming>) -> Result<Response<BufferedBody>, hyper::Error> {
+        Ok(Response::new(BufferedBody::from_bytes(b"Healthy")))
     }
 
     pub async fn prometheus(
@@ -145,7 +168,7 @@ impl RisuServer {
         let target_address = &service.configuration.target_addresses[random_number];
 
         let value_factory = |request: Request<BufferedBody>| async {
-            info!("Cache miss");
+            debug!("Cache miss");
             service.metrics.cache_misses.inc();
 
             let target_uri = Uri::builder()
@@ -159,7 +182,7 @@ impl RisuServer {
             // Todo: Connect and handshake only once and reuse the connection
             let stream = TcpStream::connect(target_address).await.expect("Connection failed");
 
-            info!("Connected");
+            debug!("Connected");
 
             // Use an adapter to access something implementing `tokio::io` traits as if they implement
             // `hyper::rt` IO traits.
@@ -170,7 +193,7 @@ impl RisuServer {
                 .await
                 .expect("Handshake failed");
 
-            info!("Handshake completed");
+            debug!("Handshake completed");
 
             // Spawn a task to poll the connection, driving the HTTP state
             // Todo: Is this necessary?
@@ -192,12 +215,12 @@ impl RisuServer {
 
             let body = request.into_body();
 
-            info!("Buffering request...");
+            debug!("Buffering request...");
 
             // Copy body
             let forwarded_req = forwarded_req.body(body).expect("Failed building request");
 
-            info!("Forwarding request");
+            debug!("Forwarding request");
 
             // Await the response...
             let res: Response<Incoming> = sender
@@ -209,7 +232,7 @@ impl RisuServer {
             let (parts, body) = res.into_parts();
             let collected = BufferedBody::collect_buffered(body).await.unwrap();
 
-            info!("Received response from target with status: {:?}", parts.status);
+            debug!("Received response from target with status: {:?}", parts.status);
 
             Ok(Response::from_parts(parts, collected))
         };
@@ -227,7 +250,7 @@ impl RisuServer {
             Ok(response) => {
                 let response = response.as_ref();
                 let response: Response<BufferedBody> = response.clone();
-                info!("Received response from target with status: {:?}", response);
+                debug!("Received response from target with status: {:?}", response);
                 Ok(response)
             }
             Err(e) => Err(e),
