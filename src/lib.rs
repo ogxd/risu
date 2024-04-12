@@ -157,9 +157,21 @@ impl RisuServer {
         let key_factory = |request: &Request<BufferedBody>| {
             // Hash request content
             let mut hasher = GxHasher::with_seed(123);
+            // Different path/query means different key
             request.uri().path().hash(&mut hasher);
             request.uri().query().hash(&mut hasher);
-            request.body().hash(&mut hasher); // Todo: Make this more seamless
+            // Sometimes, we can't rely on the request body. 
+            // For example, protobuf maps are serialized in a non-deterministic order.
+            // https://gist.github.com/kchristidis/39c8b310fd9da43d515c4394c3cd9510
+            // In this case, the caller may define a hash header to not use the body for the key.
+            match request.headers().get("x-hash") {
+                // If the request has a hash header, use it as the key
+                Some(value) => value.as_bytes().hash(&mut hasher),
+                // Otherwise hash the request body
+                None => {
+                    request.body().hash(&mut hasher); 
+                }
+            }
             hasher.finish_u128()
         };
 
