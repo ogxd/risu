@@ -1,13 +1,10 @@
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
+include!("../../proto/helloworld.rs");
+
+use greeter_server::{Greeter, GreeterServer};
 use risu::{self, RisuServer};
 use simplelog::*;
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
-
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
 
 #[derive(Debug, Default)]
 pub struct MyGreeter {}
@@ -15,7 +12,7 @@ pub struct MyGreeter {}
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
-        let reply = hello_world::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
 
@@ -60,7 +57,7 @@ impl TestServer {
 #[tokio::main]
 async fn main() {
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Warn,
+        LevelFilter::Info,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,

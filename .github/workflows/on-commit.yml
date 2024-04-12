@@ -19,12 +19,12 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-      
+
+    - name: Build # Must be able to build without protoc
+      run: cargo build
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
-
-    - name: Build
-      run: cargo build
 
     - name: Test
       run: cargo test

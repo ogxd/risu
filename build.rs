@@ -1,10 +1,12 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // match tonic_build::compile_protos("proto/hello.proto") {
-    //     Ok(_) => Ok(()),
-    //     Err(e) => {
-    //         eprintln!("Failed to compile proto files: {:?}", e);
-    //         Ok(()) // Ignore missing protoc
-    //     }
-    // }
+
+    if let Err(x) = tonic_build::configure()
+        .build_server(true)
+        .out_dir("proto")
+        .compile(&["proto/hello.proto"], &["proto"])
+    {
+        eprintln!("Failed to compile proto files: {:?}. Using precompiled version.", x);
+    }
+
     Ok(())
 }

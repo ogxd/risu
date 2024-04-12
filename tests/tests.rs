@@ -1,15 +1,12 @@
+include!("../proto/helloworld.rs");
+
 use std::time::Duration;
 
-use hello_world::greeter_client::GreeterClient;
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
-use risu::{self, RisuConfiguration, RisuServer};
+use greeter_client::GreeterClient;
+use greeter_server::{Greeter, GreeterServer};
+use risu::{self, RisuServer};
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
-
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
 
 #[derive(Debug, Default)]
 pub struct MyGreeter {}
@@ -19,7 +16,7 @@ impl Greeter for MyGreeter {
     async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
-        let reply = hello_world::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
 
