@@ -164,8 +164,8 @@ impl RisuServer {
             // For example, protobuf maps are serialized in a non-deterministic order.
             // https://gist.github.com/kchristidis/39c8b310fd9da43d515c4394c3cd9510
             // In this case, the caller may define a hash header to not use the body for the key.
-            match request.headers().get("x-hash") {
-                // If the request has a hash header, use it as the key
+            match request.headers().get("x-request-id") {
+                // If the request has a request id header, use it as the key
                 Some(value) => value.as_bytes().hash(&mut hasher),
                 // Otherwise hash the request body
                 None => {
