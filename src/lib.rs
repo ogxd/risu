@@ -17,11 +17,14 @@ use executor::TokioExecutor;
 use futures::join;
 use gxhash::GxHasher;
 use hyper::body::Incoming;
+use hyper::client::conn::http1::SendRequest;
 use hyper::http::Uri;
 use hyper::server::conn::{http1, http2};
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
+use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::connect::HttpConnector;
 use metrics::Metrics;
 use rand::Rng;
 use std::hash::Hash;
@@ -34,7 +37,7 @@ pub struct RisuServer {
     configuration: RisuConfiguration,
     cache: ShardedCache<u128, Response<BufferedBody>>,
     metrics: Metrics,
-    //client: Client<HttpConnector>,
+    client: Client<HttpConnector, BufferedBody>,
 }
 
 impl RisuServer {
@@ -55,6 +58,7 @@ impl RisuServer {
 
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
         info!("Starting Risu server...");
+
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
             cache: ShardedCache::<u128, Response<BufferedBody>>::new(
@@ -64,7 +68,7 @@ impl RisuServer {
                 lru::ExpirationType::Absolute,
             ),
             metrics: Metrics::new(),
-            //client: Client::builder().http2_only(true).build_http(),
+            client: Client::builder(TokioExecutor).http2_only(true).build_http(),
         });
 
         let service = async {
@@ -192,28 +196,28 @@ impl RisuServer {
 
             // Open a TCP connection to the remote host
             // Todo: Connect and handshake only once and reuse the connection
-            let stream = TcpStream::connect(target_address).await.expect("Connection failed");
+            //let stream = TcpStream::connect(target_address).await.expect("Connection failed");
 
             debug!("Connected");
 
             // Use an adapter to access something implementing `tokio::io` traits as if they implement
             // `hyper::rt` IO traits.
-            let io = TokioIo::new(stream);
+            //let io = TokioIo::new(stream);
 
             // Create the Hyper client
-            let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io)
-                .await
-                .expect("Handshake failed");
+            // let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io)
+            //     .await
+            //     .expect("Handshake failed");
 
             debug!("Handshake completed");
 
             // Spawn a task to poll the connection, driving the HTTP state
             // Todo: Is this necessary?
-            tokio::task::spawn(async move {
-                if let Err(err) = conn.await {
-                    error!("Connection failed: {:?}", err);
-                }
-            });
+            // tokio::task::spawn(async move {
+            //     if let Err(err) = conn.await {
+            //         error!("Connection failed: {:?}", err);
+            //     }
+            // });
 
             // Copy path and query
             let mut forwarded_req = Request::builder()
@@ -234,11 +238,15 @@ impl RisuServer {
 
             debug!("Forwarding request");
 
-            // Await the response...
-            let res: Response<Incoming> = sender
-                .send_request(forwarded_req)
+            let res: Response<Incoming> = service.client.request(forwarded_req)
                 .await
                 .expect("Failed to send request");
+
+            // // Await the response...
+            // let res: Response<Incoming> = sender
+            //     .send_request(forwarded_req)
+            //     .await
+            //     .expect("Failed to send request");
 
             // Buffer response body so that we can cache it and return it
             let (parts, body) = res.into_parts();
