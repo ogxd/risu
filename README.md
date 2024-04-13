@@ -5,14 +5,14 @@ Blazingly fast and ultra-efficient multi-protocol read-through caching proxy.
 ## Todo
 
 - [x] Setup a way to test risu against various targets
-- [ ] Support HTTP/1.1
-- [ ] Support HTTP/2
+- [x] Support HTTP/1.1
+- [x] Support HTTP/2
 - [ ] Support https
-- [ ] Properly route
+- [x] Properly route
 - [x] Add basic logging
-- [ ] Expose prometheus metrics
+- [x] Expose prometheus metrics
 - [x] Setup and run benchmarks
-- [ ] Setup CI
+- [x] Setup CI
 - [x] Implement arena-based linked list
 - [x] Implement LRU cache
 - [x] Implement probatory LRU cache
@@ -20,6 +20,6 @@ Blazingly fast and ultra-efficient multi-protocol read-through caching proxy.
 - [x] Use gxhash for sharding and keying
 - [x] Implement actual caching in risu
 - [ ] Design hot keys cluster sharing
-- [ ] Find out how risu will know service to reach
-- [ ] Find out how to configure service
+- [x] Find out how risu will know service to reach
+- [x] Find out how to configure service
 - [ ] Experiment with bytedance/monoio

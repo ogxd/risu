@@ -6,6 +6,7 @@ pub struct Metrics
     pub cache_calls: Counter,
     // cache_hits: Counter,
     pub cache_misses: Counter,
+    pub connection_reset: Counter,
     // cache_evictions: Counter,
     // cache_resident_size: Counter,
     // cache_probatory_size: Counter,
@@ -24,6 +25,7 @@ impl Metrics
             .unwrap(),
             cache_calls: Counter::with_opts(Opts::new("cache_calls", "Number of cache calls")).unwrap(),
             cache_misses: Counter::with_opts(Opts::new("cache_misses", "Number of cache misses")).unwrap(),
+            connection_reset: Counter::with_opts(Opts::new("connection_reset", "Number of connection reset (RST)")).unwrap(),
             registry: Registry::new(),
         };
         metrics
@@ -37,6 +39,10 @@ impl Metrics
         metrics
             .registry
             .register(Box::new(metrics.cache_misses.clone()))
+            .unwrap();
+        metrics
+            .registry
+            .register(Box::new(metrics.connection_reset.clone()))
             .unwrap();
         metrics
     }

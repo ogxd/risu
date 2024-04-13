@@ -91,11 +91,12 @@ impl RisuServer
                 let io = TokioIo::new(stream);
                 let server = server.clone();
                 tokio::task::spawn(async move {
-                    //let server = server.clone();
+                    let server_for_metrics = server.clone();
                     if let Err(err) = http2::Builder::new(TokioExecutor)
                         .serve_connection(io, service_fn(move |req| RisuServer::call_async(server.clone(), req)))
                         .await
                     {
+                        server_for_metrics.metrics.connection_reset.inc();
                         warn!("Error serving connection: {:?}", err);
                     }
                 });
