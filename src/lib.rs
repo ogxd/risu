@@ -8,55 +8,58 @@ pub mod config;
 mod executor;
 mod metrics;
 
+use std::hash::Hash;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
+
 use buffered_body::BufferedBody;
 pub use caches::*;
 pub use collections::*;
 pub use config::RisuConfiguration;
 use executor::TokioExecutor;
-
 use futures::join;
 use gxhash::GxHasher;
 use hyper::body::Incoming;
-use hyper::client::conn::http1::SendRequest;
 use hyper::http::Uri;
 use hyper::server::conn::{http1, http2};
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
-use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioIo;
 use metrics::Metrics;
 use rand::Rng;
-use std::hash::Hash;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 
-pub struct RisuServer {
+pub struct RisuServer
+{
     configuration: RisuConfiguration,
     cache: ShardedCache<u128, Response<BufferedBody>>,
     metrics: Metrics,
     client: Client<HttpConnector, BufferedBody>,
 }
 
-impl RisuServer {
-    pub async fn start_from_config_str(config_str: &str) {
-        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(config_str)
-            .expect("Could not parse configuration file");
+impl RisuServer
+{
+    pub async fn start_from_config_str(config_str: &str)
+    {
+        let configuration: RisuConfiguration =
+            serde_yaml::from_str::<RisuConfiguration>(config_str).expect("Could not parse configuration file");
         RisuServer::start(configuration).await.unwrap();
     }
 
-    pub async fn start_from_config_file(config_file: &str) {
+    pub async fn start_from_config_file(config_file: &str)
+    {
         info!("Reading configuration from file: {}", config_file);
-        let contents = std::fs::read_to_string(config_file)
-            .expect("Could not find configuration file");
-        let configuration: RisuConfiguration = serde_yaml::from_str::<RisuConfiguration>(&contents)
-            .expect("Could not parse configuration file");
+        let contents = std::fs::read_to_string(config_file).expect("Could not find configuration file");
+        let configuration: RisuConfiguration =
+            serde_yaml::from_str::<RisuConfiguration>(&contents).expect("Could not parse configuration file");
         RisuServer::start(configuration).await.unwrap();
     }
 
-    pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error> {
+    pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error>
+    {
         info!("Starting Risu server...");
 
         let server = Arc::new(RisuServer {
@@ -73,7 +76,10 @@ impl RisuServer {
 
         let service = async {
             let service_address = SocketAddr::from(([0, 0, 0, 0], server.configuration.listening_port));
-            info!("Service listening on http://{}, http2:{}", service_address, configuration.http2);
+            info!(
+                "Service listening on http://{}, http2:{}",
+                service_address, configuration.http2
+            );
 
             let listener = TcpListener::bind(service_address).await.unwrap();
 
@@ -142,19 +148,22 @@ impl RisuServer {
         Ok(())
     }
 
-    pub async fn healthcheck(_req: Request<hyper::body::Incoming>) -> Result<Response<BufferedBody>, hyper::Error> {
+    pub async fn healthcheck(_req: Request<hyper::body::Incoming>) -> Result<Response<BufferedBody>, hyper::Error>
+    {
         Ok(Response::new(BufferedBody::from_bytes(b"Healthy")))
     }
 
     pub async fn prometheus(
         server: Arc<RisuServer>, _: Request<hyper::body::Incoming>,
-    ) -> Result<Response<BufferedBody>, hyper::Error> {
+    ) -> Result<Response<BufferedBody>, hyper::Error>
+    {
         Ok(Response::new(BufferedBody::from_bytes(&server.metrics.encode())))
     }
 
     pub async fn call_async(
         service: Arc<RisuServer>, request: Request<Incoming>,
-    ) -> Result<Response<BufferedBody>, hyper::Error> {
+    ) -> Result<Response<BufferedBody>, hyper::Error>
+    {
         let timestamp = std::time::Instant::now();
         service.metrics.cache_calls.inc();
 
@@ -164,7 +173,7 @@ impl RisuServer {
             // Different path/query means different key
             request.uri().path().hash(&mut hasher);
             request.uri().query().hash(&mut hasher);
-            // Sometimes, we can't rely on the request body. 
+            // Sometimes, we can't rely on the request body.
             // For example, protobuf maps are serialized in a non-deterministic order.
             // https://gist.github.com/kchristidis/39c8b310fd9da43d515c4394c3cd9510
             // In this case, the caller may define a hash header to not use the body for the key.
@@ -173,7 +182,7 @@ impl RisuServer {
                 Some(value) => value.as_bytes().hash(&mut hasher),
                 // Otherwise hash the request body
                 None => {
-                    request.body().hash(&mut hasher); 
+                    request.body().hash(&mut hasher);
                 }
             }
             hasher.finish_u128()
@@ -194,31 +203,6 @@ impl RisuServer {
                 .build()
                 .expect("Failed to build target URI");
 
-            // Open a TCP connection to the remote host
-            // Todo: Connect and handshake only once and reuse the connection
-            //let stream = TcpStream::connect(target_address).await.expect("Connection failed");
-
-            debug!("Connected");
-
-            // Use an adapter to access something implementing `tokio::io` traits as if they implement
-            // `hyper::rt` IO traits.
-            //let io = TokioIo::new(stream);
-
-            // Create the Hyper client
-            // let (mut sender, conn) = hyper::client::conn::http2::handshake(TokioExecutor, io)
-            //     .await
-            //     .expect("Handshake failed");
-
-            debug!("Handshake completed");
-
-            // Spawn a task to poll the connection, driving the HTTP state
-            // Todo: Is this necessary?
-            // tokio::task::spawn(async move {
-            //     if let Err(err) = conn.await {
-            //         error!("Connection failed: {:?}", err);
-            //     }
-            // });
-
             // Copy path and query
             let mut forwarded_req = Request::builder()
                 .method(request.method())
@@ -238,23 +222,20 @@ impl RisuServer {
 
             debug!("Forwarding request");
 
-            let res: Response<Incoming> = service.client.request(forwarded_req)
+            // Await the response...
+            let response: Response<Incoming> = service
+                .client
+                .request(forwarded_req)
                 .await
                 .expect("Failed to send request");
 
-            // // Await the response...
-            // let res: Response<Incoming> = sender
-            //     .send_request(forwarded_req)
-            //     .await
-            //     .expect("Failed to send request");
-
             // Buffer response body so that we can cache it and return it
-            let (parts, body) = res.into_parts();
-            let collected = BufferedBody::collect_buffered(body).await.unwrap();
+            let (parts, body) = response.into_parts();
+            let buffered_response_body = BufferedBody::collect_buffered(body).await.unwrap();
 
             debug!("Received response from target with status: {:?}", parts.status);
 
-            Ok(Response::from_parts(parts, collected))
+            Ok(Response::from_parts(parts, buffered_response_body))
         };
 
         let (parts, body) = request.into_parts();

@@ -1,6 +1,7 @@
 use prometheus::{Counter, Encoder, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
 
-pub struct Metrics {
+pub struct Metrics
+{
     pub response_time: Histogram,
     pub cache_calls: Counter,
     // cache_hits: Counter,
@@ -11,8 +12,10 @@ pub struct Metrics {
     registry: Registry,
 }
 
-impl Metrics {
-    pub fn new() -> Metrics {
+impl Metrics
+{
+    pub fn new() -> Metrics
+    {
         let metrics = Metrics {
             response_time: Histogram::with_opts(HistogramOpts::new("response_time", "Response time").buckets(vec![
                 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1., 2., 5., 10., 20., 50., 100., 200., 500., 1000., 2000., 5000.,
@@ -38,7 +41,8 @@ impl Metrics {
         metrics
     }
 
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn encode(&self) -> Vec<u8>
+    {
         let mut buffer = vec![];
         let encoder = TextEncoder::new();
         let metric_families = self.registry.gather();

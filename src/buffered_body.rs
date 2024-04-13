@@ -1,13 +1,12 @@
-use bytes::{Buf, BytesMut};
-
-use futures::Future;
-use hyper::body::{Body, Frame};
-use hyper::HeaderMap;
 use std::convert::Infallible;
 use std::hash::Hash;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use bytes::{Buf, BytesMut};
+use futures::Future;
+use hyper::body::{Body, Frame};
+use hyper::HeaderMap;
 use pin_project_lite::pin_project;
 
 pin_project! {
@@ -25,10 +24,12 @@ pin_project! {
     }
 }
 
-impl<T: Body + ?Sized> Future for BufferBody<T> {
+impl<T: Body + ?Sized> Future for BufferBody<T>
+{
     type Output = Result<BufferedBody, T::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output>
+    {
         let mut me = self.project();
 
         loop {
@@ -48,15 +49,18 @@ impl<T: Body + ?Sized> Future for BufferBody<T> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct BufferedBody {
+pub struct BufferedBody
+{
     bufs: BytesMut,
     trailers: Option<HeaderMap>,
 }
 
-impl BufferedBody {
+impl BufferedBody
+{
     /// If there is a trailers frame buffered, returns a reference to it.
     /// Returns `None` if the body contained no trailers.
-    pub fn trailers(&self) -> Option<&HeaderMap> {
+    pub fn trailers(&self) -> Option<&HeaderMap>
+    {
         self.trailers.as_ref()
     }
 
@@ -98,20 +102,22 @@ impl BufferedBody {
         }
     }
 
-    pub fn from_bytes(b: &[u8]) -> BufferedBody {
+    pub fn from_bytes(b: &[u8]) -> BufferedBody
+    {
         let mut bufs = BytesMut::new();
         bufs.extend(b);
         BufferedBody { bufs, trailers: None }
     }
 }
 
-impl Body for BufferedBody {
+impl Body for BufferedBody
+{
     type Data = BytesMut;
     type Error = Infallible;
 
-    fn poll_frame(
-        mut self: Pin<&mut Self>, _: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+    fn poll_frame(mut self: Pin<&mut Self>, _: &mut Context<'_>)
+        -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>>
+    {
         let frame = if self.bufs.len() > 0
         /* Shall we skip this frame if body is empty? */
         {
@@ -128,8 +134,10 @@ impl Body for BufferedBody {
     }
 }
 
-impl Hash for BufferedBody {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for BufferedBody
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H)
+    {
         self.bufs.hash(state);
         //self.trailers.hash(state);
     }

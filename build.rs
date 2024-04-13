@@ -1,5 +1,5 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-
+fn main() -> Result<(), Box<dyn std::error::Error>>
+{
     if let Err(x) = tonic_build::configure()
         .build_server(true)
         .out_dir("proto")

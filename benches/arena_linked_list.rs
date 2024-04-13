@@ -1,8 +1,10 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use risu::ArenaLinkedList;
 use std::collections::LinkedList;
 
-fn benchmark(c: &mut Criterion) {
+use criterion::{criterion_group, criterion_main, Criterion};
+use risu::ArenaLinkedList;
+
+fn benchmark(c: &mut Criterion)
+{
     let mut group = c.benchmark_group(format!("ArenaLinkedList"));
 
     group.bench_function("Add first", |b| {

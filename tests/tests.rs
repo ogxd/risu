@@ -12,8 +12,10 @@ use tonic::{transport::Server, Request, Response, Status};
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
-impl Greeter for MyGreeter {
-    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
+impl Greeter for MyGreeter
+{
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status>
+    {
         println!("Got a request: {:?}", request);
 
         let reply = HelloReply {
@@ -24,13 +26,16 @@ impl Greeter for MyGreeter {
     }
 }
 
-pub struct TestServer {
+pub struct TestServer
+{
     server_handle: tokio::task::JoinHandle<()>,
     shutdown_sender: oneshot::Sender<()>,
 }
 
-impl TestServer {
-    pub fn new_grpc() -> Self {
+impl TestServer
+{
+    pub fn new_grpc() -> Self
+    {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let server_handle = tokio::spawn(async move {
             let server = Server::builder()
@@ -50,7 +55,8 @@ impl TestServer {
         }
     }
 
-    pub fn new_risu() -> Self {
+    pub fn new_risu() -> Self
+    {
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let server_handle = tokio::spawn(async move {
             let start_fut = RisuServer::start_from_config_file("tests/config.yaml");
@@ -68,14 +74,16 @@ impl TestServer {
         }
     }
 
-    pub async fn shutdown(self) {
+    pub async fn shutdown(self)
+    {
         self.shutdown_sender.send(()).unwrap();
         self.server_handle.await.unwrap();
     }
 }
 
 #[tokio::test]
-async fn grpc() {
+async fn grpc()
+{
     let server = TestServer::new_grpc();
     let risu = TestServer::new_risu();
 

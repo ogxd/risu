@@ -1,9 +1,9 @@
+use risu::RisuServer;
 use simplelog::*;
 
-use risu::RisuServer;
-
 #[tokio::main]
-async fn main() {
+async fn main()
+{
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Info,
         Config::default(),

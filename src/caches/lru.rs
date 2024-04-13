@@ -1,11 +1,13 @@
-use crate::{ArenaLinkedList, Cache};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::{ArenaLinkedList, Cache};
+
 #[allow(dead_code)]
-pub struct LruCache<K, V> {
+pub struct LruCache<K, V>
+{
     lru_list: ArenaLinkedList<K>,
     map: HashMap<K, LruCacheEntry<V>>,
     expiration: Duration,
@@ -14,12 +16,14 @@ pub struct LruCache<K, V> {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-pub enum ExpirationType {
+pub enum ExpirationType
+{
     Absolute,
     Sliding,
 }
 
-struct LruCacheEntry<V> {
+struct LruCacheEntry<V>
+{
     node_index: usize,
     insertion: Instant,
     value: Arc<V>,
@@ -29,7 +33,8 @@ impl<K, V> Cache<K, V> for LruCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool
+    {
         let mut added = false;
 
         self.map.entry(key).or_insert_with_key(|k| {
@@ -48,7 +53,8 @@ where
         return added;
     }
 
-    fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
+    fn try_get(&mut self, key: &K) -> Option<Arc<V>>
+    {
         // If found in the map, remove from the lru list and reinsert at the end
         let lru_list = &mut self.lru_list;
 
@@ -88,7 +94,8 @@ impl<K, V> LruCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
+    pub fn new(max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self
+    {
         Self {
             lru_list: ArenaLinkedList::new_with_capacity(max_size),
             map: HashMap::new(),
@@ -98,7 +105,8 @@ where
         }
     }
 
-    fn trim(&mut self) {
+    fn trim(&mut self)
+    {
         let mut index = self.lru_list.get_first_index().unwrap_or(usize::MAX);
         while index != usize::MAX {
             let node = self
@@ -129,11 +137,13 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    fn basic() {
+    fn basic()
+    {
         let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_get(&1).is_none());
         assert!(lru.try_add(1, "hello"));
@@ -142,7 +152,8 @@ mod tests {
     }
 
     #[test]
-    fn trimming() {
+    fn trimming()
+    {
         let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_add(1, "h"));
         assert!(lru.try_add(2, "e"));
@@ -158,7 +169,8 @@ mod tests {
     }
 
     #[test]
-    fn reordering() {
+    fn reordering()
+    {
         let mut lru = LruCache::new(4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_add(1, "h"));
         assert!(lru.try_add(2, "e"));

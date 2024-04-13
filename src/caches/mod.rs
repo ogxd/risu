@@ -5,13 +5,15 @@ pub mod probatory;
 pub use probatory::ProbatoryCache;
 
 pub mod sharded;
-pub use sharded::ShardedCache;
-
 use std::{future::Future, sync::Arc};
 
+pub use sharded::ShardedCache;
+
 #[allow(async_fn_in_trait)]
-pub trait Cache<K, V> {
-    fn try_add(&mut self, key: K, value: V) -> bool {
+pub trait Cache<K, V>
+{
+    fn try_add(&mut self, key: K, value: V) -> bool
+    {
         self.try_add_arc(key, Arc::new(value))
     }
 

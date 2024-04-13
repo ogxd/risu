@@ -1,7 +1,8 @@
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct RisuConfiguration {
+pub struct RisuConfiguration
+{
     #[serde(default = "default_in_memory_shards")]
     pub in_memory_shards: u16,
 
@@ -28,37 +29,47 @@ pub struct RisuConfiguration {
 }
 
 // https://github.com/serde-rs/serde/issues/368 🙄
-fn default_in_memory_shards() -> u16 {
+fn default_in_memory_shards() -> u16
+{
     8
 }
-fn default_cache_resident_size() -> usize {
+fn default_cache_resident_size() -> usize
+{
     100_000
 }
-fn default_cache_probatory_size() -> usize {
+fn default_cache_probatory_size() -> usize
+{
     1_000_000
 }
-fn default_listening_port() -> u16 {
+fn default_listening_port() -> u16
+{
     3001
 }
-fn default_target_addresses() -> Vec<String> {
+fn default_target_addresses() -> Vec<String>
+{
     vec!["127.0.0.1:3002".into()]
 }
-fn default_http2() -> bool {
+fn default_http2() -> bool
+{
     true
 }
-fn default_prometheus_port() -> u16 {
+fn default_prometheus_port() -> u16
+{
     8000
 }
-fn default_healthcheck_port() -> u16 {
+fn default_healthcheck_port() -> u16
+{
     8001
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    fn test_config_deserialization() {
+    fn test_config_deserialization()
+    {
         let conf = "in_memory_shards: 42\n\
                     cache_resident_size: 123\n\
                     cache_probatory_size: 456\n\

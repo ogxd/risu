@@ -1,2 +1,4 @@
 max_width = 120
 fn_params_layout = "Compressed"
+brace_style ="AlwaysNextLine"
+group_imports ="StdExternalCrate"

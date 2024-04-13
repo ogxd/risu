@@ -9,7 +9,8 @@ where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    fn execute(&self, future: F) {
+    fn execute(&self, future: F)
+    {
         tokio::spawn(future);
     }
 }

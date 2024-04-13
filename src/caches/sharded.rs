@@ -1,13 +1,14 @@
-use crate::{Cache, ProbatoryCache};
 use std::future::Future;
 use std::hash::{DefaultHasher, Hasher};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::lru::ExpirationType;
+use crate::{Cache, ProbatoryCache};
 
 #[allow(dead_code)]
-pub struct ShardedCache<K, V> {
+pub struct ShardedCache<K, V>
+{
     shards: Vec<Arc<Mutex<ProbatoryCache<K, V>>>>,
 }
 
@@ -15,11 +16,13 @@ impl<K, V> Cache<K, V> for ShardedCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool {
+    fn try_add_arc(&mut self, key: K, value: Arc<V>) -> bool
+    {
         self.get_shard(&key).lock().unwrap().try_add_arc(key, value)
     }
 
-    fn try_get(&mut self, key: &K) -> Option<Arc<V>> {
+    fn try_get(&mut self, key: &K) -> Option<Arc<V>>
+    {
         self.get_shard(&key).lock().unwrap().try_get(key)
     }
 }
@@ -29,15 +32,18 @@ impl<K, V> ShardedCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub fn try_add_arc2(&self, key: K, value: Arc<V>) -> bool {
+    pub fn try_add_arc2(&self, key: K, value: Arc<V>) -> bool
+    {
         self.get_shard(&key).lock().unwrap().try_add_arc(key, value)
     }
 
-    pub fn try_get2(&self, key: &K) -> Option<Arc<V>> {
+    pub fn try_get2(&self, key: &K) -> Option<Arc<V>>
+    {
         self.get_shard(&key).lock().unwrap().try_get(key)
     }
 
-    pub fn new(shards: usize, max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self {
+    pub fn new(shards: usize, max_size: usize, expiration: Duration, expiration_type: ExpirationType) -> Self
+    {
         Self {
             shards: (0..shards)
                 .map(|_| Arc::new(Mutex::new(ProbatoryCache::new(max_size, expiration, expiration_type))))
@@ -45,7 +51,8 @@ where
         }
     }
 
-    fn get_shard(&self, key: &K) -> &Arc<Mutex<ProbatoryCache<K, V>>> {
+    fn get_shard(&self, key: &K) -> &Arc<Mutex<ProbatoryCache<K, V>>>
+    {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         let hash = hasher.finish() as usize;
@@ -82,11 +89,13 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    fn basic() {
+    fn basic()
+    {
         let mut lru = ShardedCache::new(1, 4, Duration::MAX, ExpirationType::Absolute);
         assert!(lru.try_get(&1).is_none());
         assert!(lru.try_add(1, "hello"));
@@ -97,7 +106,8 @@ mod tests {
     }
 
     #[test]
-    fn trimming() {
+    fn trimming()
+    {
         let mut lru = ShardedCache::new(1, 4, Duration::MAX, ExpirationType::Absolute);
         // Add every entry twice for them to enter the resident cache
         assert!(lru.try_add(1, "h"));
