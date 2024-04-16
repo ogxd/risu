@@ -259,7 +259,7 @@ impl RisuServer
         };
 
         let elapsed = timestamp.elapsed();
-        service.metrics.response_time.observe(elapsed.as_millis() as f64);
+        service.metrics.request_duration.observe(elapsed.as_secs_f64());
 
         response
     }
