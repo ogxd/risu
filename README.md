@@ -1,6 +1,37 @@
 # risu
 
-Blazingly fast and ultra-efficient multi-protocol read-through caching proxy.
+Risu is a blazingly fast and ultra-efficient multi-protocol read-through caching proxy. Placed in front of backend services, Risu will cache responses and dramatically reduce the load, without involving any changes on the client side, unlike other caching solutions.
+- **Multi-protocol**: Risu has no API. It simply supports HTTP/1.1 and HTTP/2, including everything based on (such as unary gRPC). Just point your client to Risu, and it will take care of the rest.
+- **Content-agnostic**: Risu does not care about the content of the responses, it will cache anything. Whether it's JSON, XML, HTML, or even binary data like protobuf encoded messages, Risu will cache it.
+- **Read-through caching**: In case of a cache miss, Risu will transparently forward the request to the backend service, cache the response, and return it to the client. This removes the need for handling cache misses in the client, and makes Risu a drop-in solution.
+- **Blazingly fast**: Risu uses a mixture of the best algorithms and data structures (gxhash for high throughput, in-memory sharded cache for improved concurrency, arena-based linked list for memory-efficient LRU, ...) to provide the best performance possible. This makes Risu so fast that it will consume orders of magnitude less resources than the services it's caching, making a real difference.
+
+## Usage
+
+Call google.com through Risu:
+```bash
+# todo
+```
+
+### WIP - How to tell Risu which service to reach
+
+How to handle faulty services? Risu is not meant to be a load balance or a service discovery tool. It must take forward the requests as-is. 
+
+#### Pass host as path
+It looks weird but it shouldn't imply any change on the client side. Host url is usually just a configuration parameter.  
+Might not work however with most gRPC clients, as we only pass the host and no path.
+```bash
+curl http://localhost:8080/google.com?hello`
+```
+
+#### Pass host as header
+It involves a (small) change on the client side, but it's the most flexible solution.
+```bash
+curl --header "X-TargetHost: google.com?hello" http://localhost:8080`
+```
+
+#### Pass host as config
+Issue is that it cannot change dynamically
 
 ## Todo
 
