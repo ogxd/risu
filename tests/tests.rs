@@ -7,6 +7,7 @@ use greeter_server::{Greeter, GreeterServer};
 use risu::{self, RisuServer};
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
+use warp::Filter;
 
 #[derive(Debug, Default)]
 pub struct MyGreeter {}
@@ -36,43 +37,34 @@ impl TestServer
 {
     pub fn new_grpc() -> Self
     {
-        let (shutdown_sender, shutdown_receiver) = oneshot::channel();
-        let server_handle = tokio::spawn(async move {
-            let server = Server::builder()
-                .add_service(GreeterServer::new(MyGreeter::default()))
-                .serve("127.0.0.1:3002".parse().unwrap());
-            tokio::select! {
-                _ = server => {},
-                _ = shutdown_receiver => {
-                    // Shutdown signal received
-                    println!("Shutting down the server...");
-                }
-            }
-        });
-        Self {
-            server_handle,
-            shutdown_sender,
-        }
+        Self::start(Server::builder()
+            .add_service(GreeterServer::new(MyGreeter::default()))
+            .serve("127.0.0.1:3002".parse().unwrap()))
     }
 
     pub fn new_risu() -> Self
     {
-        let (shutdown_sender, shutdown_receiver) = oneshot::channel();
-        let server_handle = tokio::spawn(async move {
-            let start_fut = RisuServer::start_from_config_file("tests/config.yaml");
-            tokio::select! {
-                _ = start_fut => {},
-                _ = shutdown_receiver => {
-                    // Shutdown signal received
-                    println!("Shutting down the server...");
-                }
-            }
-        });
-        Self {
-            server_handle,
-            shutdown_sender,
-        }
+        Self::start(RisuServer::start_from_config_file("tests/config.yaml"))
     }
+
+    fn start<F>(fut: F) -> Self
+        where F : core::future::Future + Send + 'static
+    {
+    let (shutdown_sender, shutdown_receiver) = oneshot::channel();
+    let server_handle = tokio::spawn(async move {
+        tokio::select! {
+            _ = fut => {},
+            _ = shutdown_receiver => {
+                // Shutdown signal received
+                println!("Shutting down the server...");
+            }
+        }
+    });
+    Self {
+        server_handle,
+        shutdown_sender,
+    }
+}
 
     pub async fn shutdown(self)
     {
@@ -102,3 +94,23 @@ async fn grpc()
     // Check grpc message content
     assert!(response.get_ref().message == "Hello Tonic!");
 }
+
+// #[tokio::test]
+// async fn https_external()
+// {
+    
+
+//     let risu = TestServer::new_risu();
+
+//     // Warmup
+//     tokio::time::sleep(Duration::from_secs(1)).await;
+
+
+//     server.shutdown().await;
+//     risu.shutdown().await;
+
+//     // Check grpc message content
+//     assert!(response.get_ref().message == "Hello Tonic!");
+// }
+
+// "https://httpbin.org/get"

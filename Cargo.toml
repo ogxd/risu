@@ -22,9 +22,9 @@ harness = false
 name = "qps"
 harness = false
 
-# [[bench]]
-# name = "qps_http"
-# harness = false
+[[bench]]
+name = "qps_http"
+harness = false
 
 [dependencies]
 hyper = { version = "1.2", features = ["full"] }
@@ -48,6 +48,7 @@ tonic = "0.11"
 prost = "0.12"
 itertools = "0.12.1"
 criterion = { version = "0.5.1" }
+warp = "0.3"
 
 [build-dependencies]
 tonic-build = "0.11"

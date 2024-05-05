@@ -60,18 +60,18 @@ impl RisuServer
 
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error>
     {
-        info!("Starting Risu server...");
+        info!("Starting Prequest server...");
 
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
             cache: ShardedCache::<u128, Response<BufferedBody>>::new(
                 configuration.in_memory_shards as usize,
                 configuration.cache_resident_size,
-                Duration::from_secs(600),
+                Duration::from_secs(configuration.cache_ttl_seconds as u64),
                 lru::ExpirationType::Absolute,
             ),
             metrics: Metrics::new(),
-            client: Client::builder(TokioExecutor).http2_only(true).build_http(),
+            client: Client::builder(TokioExecutor).http2_only(configuration.http2).build_http(),
         });
 
         let service = async {
@@ -90,16 +90,31 @@ impl RisuServer
                 // `hyper::rt` IO traits.
                 let io = TokioIo::new(stream);
                 let server = server.clone();
-                tokio::task::spawn(async move {
-                    let server_for_metrics = server.clone();
-                    if let Err(err) = http2::Builder::new(TokioExecutor)
-                        .serve_connection(io, service_fn(move |req| RisuServer::call_async(server.clone(), req)))
-                        .await
-                    {
-                        server_for_metrics.metrics.connection_reset.inc();
-                        warn!("Error serving connection: {:?}", err);
-                    }
-                });
+                if configuration.http2 {
+                    tokio::task::spawn(async move {
+                        debug!("Listening for http2 connections...");
+                        let server_for_metrics = server.clone();
+                        if let Err(err) = http2::Builder::new(TokioExecutor)
+                            .serve_connection(io, service_fn(move |req| RisuServer::call_async(server.clone(), req)))
+                            .await
+                        {
+                            server_for_metrics.metrics.connection_reset.inc();
+                            warn!("Error serving connection: {:?}", err);
+                        }
+                    });
+                } else {
+                    tokio::task::spawn(async move {
+                        debug!("Listening for http1 connections...");
+                        let server_for_metrics = server.clone();
+                        if let Err(err) = http1::Builder::new()
+                            .serve_connection(io, service_fn(move |req| RisuServer::call_async(server.clone(), req)))
+                            .await
+                        {
+                            server_for_metrics.metrics.connection_reset.inc();
+                            warn!("Error serving connection: {:?}", err);
+                        }
+                    });
+                }
             }
         };
 
@@ -165,6 +180,8 @@ impl RisuServer
         service: Arc<RisuServer>, request: Request<Incoming>,
     ) -> Result<Response<BufferedBody>, hyper::Error>
     {
+        debug!("Request received");
+
         let timestamp = std::time::Instant::now();
         service.metrics.cache_calls.inc();
 
