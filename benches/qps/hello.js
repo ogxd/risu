@@ -12,30 +12,29 @@ export const options = {
         executor: 'ramping-arrival-rate',
   
         // Start iterations per `timeUnit`
-        startRate: 10000,
+        startRate: 1000,
   
         // Start `startRate` iterations per minute
-        timeUnit: '10s',
+        timeUnit: '1s',
   
         // Pre-allocate necessary VUs.
-        preAllocatedVUs: 50,
+        preAllocatedVUs: 100,
   
         stages: [
-          // { target: 1000, duration: '10s' },
-          // { target: 2000, duration: '10s' },
-          // { target: 5000, duration: '10s' },
-          { target: 10000, duration: '10s' },
-          // { target: 20000, duration: '10s' },
-          // { target: 50000, duration: '10s' },
+          { target: 50000, duration: '60s' },
         ],
       },
     },
   };
 
 export default () => {
-  client.connect('127.0.0.1:3001', {
-    plaintext: true
-  });
+
+  if (__ITER == 0) {
+    // Only establish connection on the first iteration
+    client.connect('127.0.0.1:3001', {
+      plaintext: true
+    });
+  }
 
   const data = { name: 'Bert' };
   const response = client.invoke('helloworld.Greeter/SayHello', data);
@@ -44,8 +43,8 @@ export default () => {
     'status is OK': (r) => r && r.status === grpc.StatusOK,
   });
 
-  console.log(JSON.stringify(response.message));
+  //console.log(JSON.stringify(response.message));
 
-  client.close();
-  sleep(1);
+  //client.close();
+  //sleep(1);
 };
