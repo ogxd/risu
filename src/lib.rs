@@ -29,7 +29,6 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioIo;
 use metrics::Metrics;
-use rand::Rng;
 use tokio::net::TcpListener;
 
 pub struct RisuServer
@@ -206,17 +205,15 @@ impl RisuServer
             hasher.finish_u128()
         };
 
-        // Round robin target
-        let random_number = rand::thread_rng().gen_range(0..service.configuration.target_addresses.len());
-        let target_address = &service.configuration.target_addresses[random_number];
-
         let value_factory = |request: Request<BufferedBody>| async {
             debug!("Cache miss");
             service.metrics.cache_misses.inc();
 
+            let target_host = request.headers().get("x-target-host").expect("Missing X-Target-Host header! Can't forward the request.").to_str().unwrap();
+
             let target_uri = Uri::builder()
                 .scheme("http")
-                .authority(target_address.clone())
+                .authority(target_host)
                 .path_and_query(request.uri().path_and_query().unwrap().clone())
                 .build()
                 .expect("Failed to build target URI");

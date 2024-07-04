@@ -1,2 +1,1 @@
 listening_port: 3001
-target_addresses: ["127.0.0.1:3002"]

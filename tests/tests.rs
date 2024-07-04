@@ -6,7 +6,7 @@ use greeter_client::GreeterClient;
 use greeter_server::{Greeter, GreeterServer};
 use risu::{self, RisuServer};
 use tokio::sync::oneshot;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{metadata::MetadataMap, metadata::MetadataValue, transport::Server, Extensions, Request, Response, Status};
 use warp::Filter;
 
 #[derive(Debug, Default)]
@@ -84,8 +84,14 @@ async fn grpc()
 
     let mut client = GreeterClient::connect("http://127.0.0.1:3001").await.unwrap();
 
-    let request = tonic::Request::new(HelloRequest { name: "Tonic".into() });
+    let mut metadata = MetadataMap::new();
+    metadata.insert("x-target-host", "127.0.0.1:3002".parse().unwrap());
 
+    let request = tonic::Request::from_parts(
+        metadata,
+        Extensions::default(),
+        HelloRequest { name: "Tonic".into() });
+    
     let response = client.say_hello(request).await.unwrap();
 
     server.shutdown().await;
