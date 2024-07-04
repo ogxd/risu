@@ -4,6 +4,8 @@ use simplelog::*;
 #[tokio::main]
 async fn main()
 {
+    println!("█▀▀█ █▀▀█ █▀▀ █▀▀█ █░░█ █▀▀ █▀▀ ▀▀█▀▀\n█░░█ █▄▄▀ █▀▀ █░░█ █░░█ █▀▀ ▀▀█ ░░█░░\n█▀▀▀ ▀░▀▀ ▀▀▀ ▀▀▀█ ░▀▀▀ ▀▀▀ ▀▀▀ ░░▀░░");
+
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Info,
         Config::default(),

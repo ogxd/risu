@@ -62,7 +62,7 @@ impl TestServer
 async fn main()
 {
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Warn,
+        LevelFilter::Debug,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,

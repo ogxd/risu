@@ -12,6 +12,9 @@ pub struct RisuConfiguration
     #[serde(default = "default_cache_probatory_size")]
     pub cache_probatory_size: usize,
 
+    #[serde(default = "default_cache_ttl_seconds")]
+    pub cache_ttl_seconds: usize,
+
     #[serde(default = "default_listening_port")]
     pub listening_port: u16,
 
@@ -40,6 +43,10 @@ fn default_cache_resident_size() -> usize
 fn default_cache_probatory_size() -> usize
 {
     1_000_000
+}
+fn default_cache_ttl_seconds() -> usize
+{
+    600
 }
 fn default_listening_port() -> u16
 {
