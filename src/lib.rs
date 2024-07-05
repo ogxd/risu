@@ -74,6 +74,7 @@ impl RisuServer
             metrics: Metrics::new(),
             client: Client::builder(TokioExecutor)
                 .http2_only(configuration.http2)
+                .pool_max_idle_per_host(configuration.max_idle_connections_per_host as usize)
                 // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
                 .set_host(false)
                 .build_http(),

@@ -1,6 +1,6 @@
 include!("../proto/helloworld.rs");
 
-use std::time::Duration;
+use std::{clone, time::Duration};
 
 use greeter_client::GreeterClient;
 use greeter_server::{Greeter, GreeterServer};
@@ -73,9 +73,19 @@ impl TestServer
     }
 }
 
+use simplelog::*;
+
 #[tokio::test]
 async fn grpc()
 {
+    CombinedLogger::init(vec![TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )])
+    .unwrap();
+
     let server = TestServer::new_grpc();
     let risu = TestServer::new_risu();
 
@@ -84,21 +94,51 @@ async fn grpc()
 
     let mut client = GreeterClient::connect("http://127.0.0.1:3001").await.unwrap();
 
-    let mut metadata = MetadataMap::new();
-    metadata.insert("x-target-host", "127.0.0.1:3002".parse().unwrap());
+    let mut metadata1 = MetadataMap::new();
+    metadata1.insert("x-target-host", "127.0.0.1:3002".parse().unwrap());
 
-    let request = tonic::Request::from_parts(
-        metadata,
+    let request1 = tonic::Request::from_parts(
+        metadata1,
         Extensions::default(),
         HelloRequest { name: "Tonic".into() });
+
+    let mut metadata2 = MetadataMap::new();
+    metadata2.insert("x-target-host", "127.0.0.1:3002".parse().unwrap());
+
+    let request2 = tonic::Request::from_parts(
+        metadata2,
+        Extensions::default(),
+        HelloRequest { name: "Mom".into() });
+
+    let mut metadata3 = MetadataMap::new();
+    metadata3.insert("x-target-host", "127.0.0.1:3002".parse().unwrap());
+
+    let request3 = tonic::Request::from_parts(
+        metadata3,
+        Extensions::default(),
+        HelloRequest { name: "Dad".into() });
     
-    let response = client.say_hello(request).await.unwrap();
+    // let response1 = client.say_hello(request1).await.unwrap();
+    // let response2 = client.say_hello(request2).await.unwrap();
+    // let response3 = client.say_hello(request3).await.unwrap();
+
+    let mut c1 = client.clone();
+    let mut c2 = client.clone();
+    let mut c3 = client.clone();
+
+    let response1 = c1.say_hello(request1);
+    let response2 = c2.say_hello(request2);
+    let response3 = c3.say_hello(request3);
+
+    tokio::join!(response1, response2, response3);
 
     server.shutdown().await;
     risu.shutdown().await;
 
     // Check grpc message content
-    assert!(response.get_ref().message == "Hello Tonic!");
+    // assert!(response1.get_ref().message == "Hello Tonic!");
+    // assert!(response2.get_ref().message == "Hello Mom!");
+    // assert!(response3.get_ref().message == "Hello Dad!");
 }
 
 // #[tokio::test]

@@ -26,6 +26,9 @@ pub struct RisuConfiguration
 
     #[serde(default = "default_healthcheck_port")]
     pub healthcheck_port: u16,
+
+    #[serde(default = "default_max_idle_connections_per_host")]
+    pub max_idle_connections_per_host: u16,
 }
 
 // https://github.com/serde-rs/serde/issues/368 🙄
@@ -60,6 +63,10 @@ fn default_prometheus_port() -> u16
 fn default_healthcheck_port() -> u16
 {
     8001
+}
+fn default_max_idle_connections_per_host() -> u16
+{
+    4
 }
 
 #[cfg(test)]
