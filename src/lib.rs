@@ -74,7 +74,7 @@ impl RisuServer
             metrics: Metrics::new(),
             client: Client::builder(TokioExecutor)
                 .http2_only(configuration.http2)
-                .http2_keep_alive_interval(Some(Duration::from_secs(300)))
+                // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
                 .set_host(false)
                 .build_http(),
         });
