@@ -1,8 +1,8 @@
-use prometheus::{Counter, Encoder, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
+use prometheus::{Counter, Encoder, HistogramVec, HistogramOpts, Opts, Registry, TextEncoder};
 
 pub struct Metrics
 {
-    pub request_duration: Histogram,
+    pub request_duration: HistogramVec,
     pub cache_calls: Counter,
     // cache_hits: Counter,
     pub cache_misses: Counter,
@@ -18,7 +18,7 @@ impl Metrics
     pub fn new() -> Metrics
     {
         let metrics = Metrics {
-            request_duration: Histogram::with_opts(
+            request_duration: HistogramVec::new(
                 HistogramOpts::new("request_duration", "Request duration (s)").buckets(vec![
                     0.00001, /* 10μs */
                     0.00002, 0.00005, 0.0001, /* 100μs */
@@ -27,7 +27,7 @@ impl Metrics
                     0.02, 0.05, 0.1, /* 100ms */
                     0.2, 0.5, 1., /* 1s */
                     2., 5., 10., /* 10s */
-                ]),
+                ]), &["cached"]
             )
             .unwrap(),
             cache_calls: Counter::with_opts(Opts::new("cache_calls", "Number of cache calls")).unwrap(),

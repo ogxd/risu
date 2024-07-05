@@ -10,6 +10,7 @@ mod metrics;
 
 use std::hash::Hash;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,6 +31,7 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioIo;
 use metrics::Metrics;
 use tokio::net::TcpListener;
+use std::sync::atomic::Ordering;
 
 pub struct RisuServer
 {
@@ -70,7 +72,11 @@ impl RisuServer
                 lru::ExpirationType::Absolute,
             ),
             metrics: Metrics::new(),
-            client: Client::builder(TokioExecutor).http2_only(configuration.http2).build_http(),
+            client: Client::builder(TokioExecutor)
+                .http2_only(configuration.http2)
+                .http2_keep_alive_interval(Some(Duration::from_secs(300)))
+                .set_host(false)
+                .build_http(),
         });
 
         let service = async {
@@ -205,7 +211,12 @@ impl RisuServer
             hasher.finish_u128()
         };
 
+        let cached: AtomicBool = true.into();
+
         let value_factory = |request: Request<BufferedBody>| async {
+
+            cached.store(false, Ordering::Relaxed);
+
             debug!("Cache miss");
             service.metrics.cache_misses.inc();
 
@@ -273,7 +284,8 @@ impl RisuServer
         };
 
         let elapsed = timestamp.elapsed();
-        service.metrics.request_duration.observe(elapsed.as_secs_f64());
+        let cached_str = if cached.load(Ordering::Relaxed) { &["true"] } else { &["false"] };
+        service.metrics.request_duration.with_label_values(cached_str).observe(elapsed.as_secs_f64());
 
         response
     }
