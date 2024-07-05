@@ -27,6 +27,7 @@ name = "qps_http"
 harness = false
 
 [dependencies]
+reqwest = "0.12.5"
 hyper = { version = "1.2", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 bytes = "1.0"

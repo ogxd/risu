@@ -26,8 +26,9 @@ use hyper::http::Uri;
 use hyper::server::conn::{http1, http2};
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::client::legacy::Client;
+use reqwest::Client;
+// use hyper_util::client::legacy::connect::HttpConnector;
+// use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioIo;
 use metrics::Metrics;
 use tokio::net::TcpListener;
@@ -38,7 +39,7 @@ pub struct RisuServer
     configuration: RisuConfiguration,
     cache: ShardedCache<u128, Response<BufferedBody>>,
     metrics: Metrics,
-    client: Client<HttpConnector, BufferedBody>,
+    client: Client,
 }
 
 impl RisuServer
@@ -72,11 +73,10 @@ impl RisuServer
                 lru::ExpirationType::Absolute,
             ),
             metrics: Metrics::new(),
-            client: Client::builder(TokioExecutor)
-                .http2_only(configuration.http2)
-                // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
-                .set_host(false)
-                .build_http(),
+            client: Client::builder()
+                .connection_verbose(true)
+                .http2_prior_knowledge()
+                .build(),
         });
 
         let service = async {
@@ -249,11 +249,19 @@ impl RisuServer
             debug!("Forwarding request");
 
             // Await the response...
-            let response: Response<Incoming> = service
+            let response_rq: reqwest::Response = service
                 .client
-                .request(forwarded_req)
+                .execute(forwarded_req)
                 .await
                 .expect("Failed to send request");
+
+            
+            let (parts, body) = response_rq.res.into_parts();
+            let body = Body::streaming(body);
+            http::Response::from_parts(parts, body)
+
+            response_rq.
+            let response: Response<BufferedBody> = response_rq.into();
 
             // Buffer response body so that we can cache it and return it
             let (parts, body) = response.into_parts();
