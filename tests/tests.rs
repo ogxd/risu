@@ -17,8 +17,6 @@ impl Calculator for MyCalculator
 {
     async fn sum(&self, request: Request<CalculationRequest>) -> Result<Response<CalculationResult>, Status>
     {
-        println!("Got a request: {:?}", request);
-
         let request = request.into_inner();
 
         let reply = CalculationResult {
@@ -80,13 +78,7 @@ use simplelog::*;
 #[tokio::test]
 async fn grpc()
 {
-    CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Debug,
-        Config::default(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )])
-    .unwrap();
+    //let logger = memory_logger::blocking::MemoryLogger::setup(log::Level::Debug).unwrap();
 
     let risu_port = 3001;
     let target_port = 3002;
@@ -119,18 +111,16 @@ async fn grpc()
 
     server.shutdown().await;
     risu.shutdown().await;
+
+    // let contents = logger.read();
+
+    // assert_eq!(contents.matches("pooling idle connection").count(), 1);
 }
 
 #[tokio::test]
 async fn grpc_many()
 {
-    // CombinedLogger::init(vec![TermLogger::new(
-    //     LevelFilter::Debug,
-    //     Config::default(),
-    //     TerminalMode::Mixed,
-    //     ColorChoice::Auto,
-    // )])
-    // .unwrap();
+    let logger = memory_logger::blocking::MemoryLogger::setup(log::Level::Debug).unwrap();
 
     let risu_port = 3008;
  
@@ -175,4 +165,8 @@ async fn grpc_many()
     server2.shutdown().await;
     server3.shutdown().await;
     risu.shutdown().await;
+
+    let contents = logger.read();
+
+    assert_eq!(contents.matches("pooling idle connection").count(), 3);
 }

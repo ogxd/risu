@@ -49,6 +49,7 @@ prost = "0.12"
 itertools = "0.12.1"
 criterion = { version = "0.5.1" }
 warp = "0.3"
+memory_logger = { version = "0.1.1", features = ["blocking"] }
 
 [build-dependencies]
 tonic-build = "0.11"
