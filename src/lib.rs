@@ -61,7 +61,7 @@ impl RisuServer
 
     pub async fn start(configuration: RisuConfiguration) -> Result<(), std::io::Error>
     {
-        info!("Starting Prequest server...");
+        info!("Starting Risu server...");
 
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
@@ -130,7 +130,10 @@ impl RisuServer
         };
 
         let prometheus = async {
-            let prom_address: SocketAddr = ([0, 0, 0, 0], server.configuration.prometheus_port).into();
+            if server.configuration.prometheus_port.is_none() {
+                return;
+            }
+            let prom_address: SocketAddr = ([0, 0, 0, 0], server.configuration.prometheus_port.unwrap()).into();
             info!("Prometheus listening on http://{}", prom_address);
             let listener = TcpListener::bind(prom_address).await.unwrap();
 
@@ -151,7 +154,10 @@ impl RisuServer
         };
 
         let healthcheck = async {
-            let health_address: SocketAddr = ([0, 0, 0, 0], server.configuration.healthcheck_port).into();
+            if server.configuration.healthcheck_port.is_none() {
+                return;
+            }
+            let health_address: SocketAddr = ([0, 0, 0, 0], server.configuration.healthcheck_port.unwrap()).into();
             info!("Healthcheck listening on http://{}", health_address);
             let listener = TcpListener::bind(health_address).await.unwrap();
 

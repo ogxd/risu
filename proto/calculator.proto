@@ -1,0 +1,15 @@
+syntax = "proto3";
+package helloworld;
+
+service Calculator {
+    rpc Sum (CalculationRequest) returns (CalculationResult);
+}
+
+message CalculationRequest {
+   int32 a = 1;
+   int32 b = 2;
+}
+
+message CalculationResult {
+    int32 result = 1;
+}

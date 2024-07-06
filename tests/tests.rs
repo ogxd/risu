@@ -2,25 +2,27 @@ include!("../proto/helloworld.rs");
 
 use std::{clone, time::Duration};
 
-use greeter_client::GreeterClient;
-use greeter_server::{Greeter, GreeterServer};
+use calculator_client::CalculatorClient;
+use calculator_server::{Calculator, CalculatorServer};
 use risu::{self, RisuConfiguration, RisuServer};
 use tokio::sync::oneshot;
 use tonic::{metadata::MetadataMap, metadata::MetadataValue, transport::Server, Extensions, Request, Response, Status};
 use warp::Filter;
 
 #[derive(Debug, Default)]
-pub struct MyGreeter {}
+pub struct MyCalculator {}
 
 #[tonic::async_trait]
-impl Greeter for MyGreeter
+impl Calculator for MyCalculator
 {
-    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>, Status>
+    async fn sum(&self, request: Request<CalculationRequest>) -> Result<Response<CalculationResult>, Status>
     {
         println!("Got a request: {:?}", request);
 
-        let reply = HelloReply {
-            message: format!("Hello {}!", request.into_inner().name),
+        let request = request.into_inner();
+
+        let reply = CalculationResult {
+            result: request.a + request.b,
         };
 
         Ok(Response::new(reply))
@@ -38,7 +40,7 @@ impl TestServer
     pub fn new_grpc(address: String) -> Self
     {
         Self::start(Server::builder()
-            .add_service(GreeterServer::new(MyGreeter::default()))
+            .add_service(CalculatorServer::new(MyCalculator::default()))
             .serve(address.parse().unwrap()))
     }
 
@@ -100,7 +102,7 @@ async fn grpc()
     // Let servers start and warmup
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let mut client = GreeterClient::connect(format!("http://127.0.0.1:{}", risu_port)).await.unwrap();
+    let mut client = CalculatorClient::connect(format!("http://127.0.0.1:{}", risu_port)).await.unwrap();
 
     let mut metadata = MetadataMap::new();
     metadata.insert("x-target-host", format!("127.0.0.1:{}", target_port).parse().unwrap());
@@ -108,13 +110,69 @@ async fn grpc()
     let request = tonic::Request::from_parts(
         metadata,
         Extensions::default(),
-        HelloRequest { name: "Cacheus".into() });
+        CalculationRequest { a: 1, b: 1 });
     
-    let response = client.say_hello(request).await.unwrap();
+    let response = client.sum(request).await.unwrap();
+
+    // Check grpc message content
+    assert!(response.get_ref().result == 2);
 
     server.shutdown().await;
     risu.shutdown().await;
+}
 
-    // Check grpc message content
-    assert!(response.get_ref().message == "Hello Cacheus!");
+#[tokio::test]
+async fn grpc_many()
+{
+    // CombinedLogger::init(vec![TermLogger::new(
+    //     LevelFilter::Debug,
+    //     Config::default(),
+    //     TerminalMode::Mixed,
+    //     ColorChoice::Auto,
+    // )])
+    // .unwrap();
+
+    let risu_port = 3008;
+ 
+    let config = RisuConfiguration {
+        listening_port: risu_port,
+        ..Default::default()
+    };
+
+    let server1 = TestServer::new_grpc(format!("127.0.0.1:{}", 3410));
+    let server2 = TestServer::new_grpc(format!("127.0.0.1:{}", 3411));
+    let server3 = TestServer::new_grpc(format!("127.0.0.1:{}", 3412));
+    let risu = TestServer::new_risu(config);
+
+    // Let servers start and warmup
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let mut client = CalculatorClient::connect(format!("http://127.0.0.1:{}", risu_port)).await.unwrap();
+
+    for _ in 0..100
+    {
+        // Get random number between 0 and 2
+        let target_port = 3410 + (rand::random::<u32>() % 3);
+        let mut metadata = MetadataMap::new();
+        metadata.insert("x-target-host", format!("127.0.0.1:{}", target_port).parse().unwrap());
+
+        // Get random string
+        let a = rand::random::<u8>() as i32;
+        let b = rand::random::<u8>() as i32;
+
+        let request = tonic::Request::from_parts(
+            metadata,
+            Extensions::default(),
+            CalculationRequest { a: a, b: b});
+        
+        let response = client.sum(request).await.unwrap();
+
+        // Check grpc message content
+        assert!(response.get_ref().result == a + b);
+    }
+
+    server1.shutdown().await;
+    server2.shutdown().await;
+    server3.shutdown().await;
+    risu.shutdown().await;
 }
