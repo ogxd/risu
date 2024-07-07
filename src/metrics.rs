@@ -27,7 +27,7 @@ impl Metrics
                     0.02, 0.05, 0.1, /* 100ms */
                     0.2, 0.5, 1., /* 1s */
                     2., 5., 10., /* 10s */
-                ]), &["cached"]
+                ]), &["cached", "target"]
             )
             .unwrap(),
             cache_calls: Counter::with_opts(Opts::new("cache_calls", "Number of cache calls")).unwrap(),

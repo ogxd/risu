@@ -314,6 +314,9 @@ impl RisuServer
         let buffered_body = BufferedBody::collect_buffered(body).await.unwrap();
         let request = Request::from_parts(parts, buffered_body);
 
+        let b = request.headers().get("x-target-host").expect("Missing X-Target-Host header! Can't forward the request.").to_owned();
+        let target_host = b.to_str().unwrap();
+
         let result: Result<Arc<Response<BufferedBody>>, hyper::Error> = service
             .cache
             .get_or_add_from_item2(request, key_factory, value_factory)
@@ -330,7 +333,7 @@ impl RisuServer
         };
 
         let elapsed = timestamp.elapsed();
-        let cached_str = if cached.load(Ordering::Relaxed) { &["true"] } else { &["false"] };
+        let cached_str = if cached.load(Ordering::Relaxed) { &["true", target_host ] } else { &["false", target_host] };
         service.metrics.request_duration.with_label_values(cached_str).observe(elapsed.as_secs_f64());
 
         response
