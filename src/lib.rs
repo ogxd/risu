@@ -8,6 +8,7 @@ pub mod config;
 mod executor;
 mod metrics;
 
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicBool;
@@ -25,20 +26,21 @@ use hyper::body::Incoming;
 use hyper::http::Uri;
 use hyper::server::conn::{http1, http2};
 use hyper::service::service_fn;
-use hyper::{Request, Response};
+use hyper::{client, Request, Response};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioIo;
 use metrics::Metrics;
 use tokio::net::TcpListener;
 use std::sync::atomic::Ordering;
+use std::sync::{RwLock};
 
 pub struct RisuServer
 {
     configuration: RisuConfiguration,
     cache: ShardedCache<u128, Response<BufferedBody>>,
     metrics: Metrics,
-    client: Client<HttpConnector, BufferedBody>,
+    clients: RwLock<HashMap<String, Client<HttpConnector, BufferedBody>>>,
 }
 
 impl RisuServer
@@ -72,17 +74,7 @@ impl RisuServer
                 lru::ExpirationType::Absolute,
             ),
             metrics: Metrics::new(),
-            client: Client::builder(TokioExecutor)
-                .http2_only(configuration.http2)
-                // .pool_max_idle_per_host(configuration.max_idle_connections_per_host as usize)
-                // .http2_max_send_buf_size(128_000_000)
-                // .timer(hyper_util::rt::TokioTimer::new())
-                // .pool_timer(hyper_util::rt::TokioTimer::new())
-                // .pool_idle_timeout(std::time::Duration::from_secs(90))
-                // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
-                // .retry_canceled_requests(false)
-                // .set_host(false)
-                .build_http(),
+            clients: RwLock::new(HashMap::new()),
         });
 
         let service = async {
@@ -193,6 +185,26 @@ impl RisuServer
         Ok(Response::new(BufferedBody::from_bytes(&server.metrics.encode())))
     }
 
+    fn get_or_insert(map: &RwLock<HashMap<String, Client<HttpConnector, BufferedBody>>>, key: String) -> Client<HttpConnector, BufferedBody> {
+        // First, try to get a read lock and check if the key exists
+        if let Ok(read_guard) = map.read() {
+            if let Some(value) = read_guard.get(&key) {
+                return value.clone();
+            }
+        }
+    
+        // If the key doesn't exist, we need to acquire a write lock
+        let mut write_guard = map.write().unwrap();
+        
+        // Use the entry API to insert the default value if the key doesn't exist
+        write_guard.entry(key).or_insert_with(|| {
+            let connector = HttpConnector::new();
+            return Client::builder(TokioExecutor)
+                .http2_only(true)
+                .build_http();
+        }).clone()
+    }
+
     pub async fn call_async(
         service: Arc<RisuServer>, request: Request<Incoming>,
     ) -> Result<Response<BufferedBody>, hyper::Error>
@@ -232,7 +244,8 @@ impl RisuServer
             debug!("Cache miss");
             service.metrics.cache_misses.inc();
 
-            let target_host = request.headers().get("x-target-host").expect("Missing X-Target-Host header! Can't forward the request.").to_str().unwrap();
+            let b = request.headers().get("x-target-host").expect("Missing X-Target-Host header! Can't forward the request.").to_owned();
+            let target_host = b.to_str().unwrap();
 
             let target_uri = Uri::builder()
                 .scheme("http")
@@ -260,9 +273,30 @@ impl RisuServer
 
             debug!("Forwarding request");
 
+            // Acquire an upgradeable read lock
+            //let upgradable_guard = service.clients.upgradable_read();
+
+            // let client: Client<HttpConnector, BufferedBody> = if let Some(&value) = upgradable_guard.get(&target_host.to_string()) {
+            //     // Key exists, return the value
+            //     return value;
+            // } else {
+            //     // Key doesn't exist, upgrade to write lock
+            //     let mut write_guard = RwLockUpgradableReadGuard::upgrade(upgradable_guard);
+
+            //     // Use the entry API to insert the default value if the key doesn't exist
+            //     let k = *write_guard.entry(target_host.to_string()).or_insert_with(|| {
+            //         let connector = HttpConnector::new();
+            //         Client::builder(TokioExecutor)
+            //             .http2_only(service.configuration.http2)
+            //             .build_http()
+            //     });
+            //     k
+            // };
+
+            let client = Self::get_or_insert(&service.clients, target_host.to_owned());
+
             // Await the response...
-            let response: Response<Incoming> = service
-                .client
+            let response: Response<Incoming> = client
                 .request(forwarded_req)
                 .await
                 .expect("Failed to send request");
