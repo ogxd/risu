@@ -63,6 +63,9 @@ impl RisuServer
     {
         info!("Starting Prequest server...");
 
+        let mut connector = HttpConnector::new();
+        connector.set_nodelay(true);
+
         let server = Arc::new(RisuServer {
             configuration: configuration.clone(),
             cache: ShardedCache::<u128, Response<BufferedBody>>::new(
@@ -74,15 +77,15 @@ impl RisuServer
             metrics: Metrics::new(),
             client: Client::builder(TokioExecutor)
                 .http2_only(configuration.http2)
-                .pool_max_idle_per_host(configuration.max_idle_connections_per_host as usize)
-                .http2_max_send_buf_size(128_000_000)
-                .timer(hyper_util::rt::TokioTimer::new())
-                .pool_timer(hyper_util::rt::TokioTimer::new())
-                .pool_idle_timeout(std::time::Duration::from_secs(90))
-                .http2_keep_alive_interval(Some(Duration::from_secs(300)))
-                .retry_canceled_requests(false)
+                // .pool_max_idle_per_host(configuration.max_idle_connections_per_host as usize)
+                // .http2_max_send_buf_size(128_000_000)
+                // .timer(hyper_util::rt::TokioTimer::new())
+                // .pool_timer(hyper_util::rt::TokioTimer::new())
+                // .pool_idle_timeout(std::time::Duration::from_secs(90))
+                // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
+                // .retry_canceled_requests(false)
                 .set_host(false)
-                .build_http(),
+                .build(connector),
         });
 
         let service = async {
