@@ -1,0 +1,31 @@
+listening_port: 8080
+prometheus_port: 8081
+healthcheck_port: 8082
+minimum_log_level: info
+
+middlewares:
+  # Just emit a log line that you can find in the standard output.
+  - log:
+      level: info
+      value: 'Cache status: $cache_status, Forward target: $forward_target'
+  # This will try to serve the request from cache 'files'.
+  - use_cache:
+      cache_name: files
+      when:
+        status_code_is: 200
+  # This will forward the request to the origin server if there is a cache miss.
+  # The url will be <scheme>://<target_host>/<original_path_and_query>
+  - forward_request:
+      scheme: https
+      target_host: download.maxmind.com
+
+caches:
+  # The hybrid cache saves cached responses both in memory and on disk.
+  # Saving to disk is useful to persist cache across pod restarts, provided you have a persistent volume mounted.
+  - hybrid:
+      name: files
+      path: /tmp/cacheus/maxmind
+      ttl_seconds: 86400
+      hash_path: false
+      hash_query: true
+      hash_body: false
