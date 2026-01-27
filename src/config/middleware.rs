@@ -1,11 +1,10 @@
 use std::{str::FromStr, sync::Arc};
 
 use hyper::{header::{HeaderName, HeaderValue}, Request, Response, Uri};
-use hyper_tls::HttpsConnector;
-use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
-use crate::{CallContext, buffered_body::BufferedBody, config::{CacheConfig, cache::CachedResponse, conditions::Condition}, executor::TokioExecutor};
+use crate::{CallContext, buffered_body::BufferedBody, config::{CacheConfig, cache::CachedResponse, conditions::Condition}};
+use reqwest as rw;
 
 trait Middleware {
     async fn init(&mut self) {}
@@ -174,42 +173,62 @@ impl Middleware for CacheMiddleware {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Forward {
     pub target_host: String,
-    #[serde(default)]
     pub enforce_http2: bool,
-    #[serde(default)]
     pub enforce_http: bool,
-    #[serde(default)]
+    /// Nagle algorithm can cause delays in sending small packets.
+    /// Default is disabled.
     pub use_nagle: bool,
-    #[serde(default)]
+    /// The maximum number of redirects to follow. Set 0 to disable redirects.
+    /// Default is 3.
+    pub max_redirects: u8,
     pub scheme: Option<String>,
-    #[serde(default)]
     pub when: Option<Condition>,
     #[serde(skip)]
-    pub client: Option<Arc<Client<HttpsConnector<HttpConnector>, BufferedBody>>>,
+    pub client: Option<Arc<rw::Client>>,
+}
+
+impl Default for Forward {
+    fn default() -> Self {
+        Self {
+            target_host: "".to_string(),
+            enforce_http2: false,
+            enforce_http: false,
+            use_nagle: false,
+            max_redirects: 3,
+            scheme: None,
+            when: None,
+            client: None,
+        }
+    }
 }
 
 impl Middleware for Forward {
 
     async fn init(&mut self) {
+        let mut builder = rw::Client::builder();
 
-        let mut http = HttpConnector::new();
-        http.set_nodelay(!self.use_nagle);
-        http.enforce_http(self.enforce_http);
-        let connector = HttpsConnector::new_with_connector(http);
+        if self.max_redirects > 0 {
+            builder = builder.redirect(rw::redirect::Policy::limited(3));
+        } else {
+            builder = builder.redirect(rw::redirect::Policy::none());
+        }
 
-        let client = Client::builder(TokioExecutor)
-            .http2_only(self.enforce_http2)
-            // .pool_max_idle_per_host(configuration.max_idle_connections_per_host as usize)
-            // .http2_max_send_buf_size(128_000_000)
-            // .timer(hyper_util::rt::TokioTimer::new())
-            // .pool_timer(hyper_util::rt::TokioTimer::new())
-            // .pool_idle_timeout(std::time::Duration::from_secs(90))
-            // .http2_keep_alive_interval(Some(Duration::from_secs(300)))
-            // .retry_canceled_requests(false)
-            .set_host(false)
-            .build(connector);
+        builder = builder.tcp_nodelay(!self.use_nagle);
+        
+        // Try to honor HTTP/2 vs HTTP/1 preferences when specified.
+        if self.enforce_http2 {
+            builder = builder.http2_prior_knowledge();
+        }
+        if self.enforce_http {
+            builder = builder.http1_only();
+        }
+
+        let client = builder
+            .build()
+            .expect("Failed to build reqwest client");
 
         self.client = Some(Arc::new(client));
     }
@@ -236,21 +255,51 @@ impl Middleware for Forward {
 
         context.variables.insert("$forward_target".to_string(), target_uri.to_string());
 
-        let mut forwarded_req = Request::builder()
-            .method(request.method())
-            .uri(target_uri)
-            .version(request.version())
-            .body(request.body().clone()).unwrap();
+        // Build reqwest request
+        let url = target_uri.to_string();
+        let client = self.client.as_ref().expect("Client not initialized");
+        let mut req_builder = client.request(
+            reqwest::Method::from_bytes(request.method().as_str().as_bytes()).unwrap(),
+            &url,
+        );
 
-        let headers = forwarded_req.headers_mut();
-        headers.extend(request.headers().iter().map(|(k, v)| (k.clone(), v.clone())));
-        headers.insert("host", target_host.parse().unwrap());
-        headers.remove("accept-encoding");
+        // Copy headers, skipping hop-by-hop or ones managed by reqwest
+        // - Skip "host"; reqwest sets it from URL
+        // - Skip "accept-encoding" to avoid auto-compression issues
+        // - Content-Length will be set by reqwest based on body
+        for (name, value) in request.headers().iter() {
+            let name_str = name.as_str();
+            if name_str.eq_ignore_ascii_case("host") || name_str.eq_ignore_ascii_case("accept-encoding") || name_str.eq_ignore_ascii_case("content-length") {
+                continue;
+            }
+            req_builder = req_builder.header(name, value);
+        }
 
-        let res = self.client.as_ref().unwrap().request(forwarded_req).await.expect("Failed to send request");
-        let (parts, body) = res.into_parts();
-        let buffered_body = BufferedBody::collect_buffered(body).await.unwrap();
-        return Some(Response::from_parts(parts, buffered_body));
+        // Attach body
+        let body_bytes = request.body().body_bytes();
+        if !body_bytes.is_empty() {
+            req_builder = req_builder.body(body_bytes.to_vec());
+        }
+
+        let res = req_builder.send().await.expect("Failed to send request");
+
+        // Map back to hyper::Response<BufferedBody>
+        let status = res.status();
+        let mut builder = Response::builder().status(status);
+
+        // Headers
+        {
+            let headers_mut = builder.headers_mut().unwrap();
+            for (k, v) in res.headers().iter() {
+                // reqwest's HeaderName/Value are re-exported from http, compatible with hyper
+                headers_mut.insert(k.clone(), v.clone());
+            }
+        }
+
+        let bytes = res.bytes().await.expect("Failed to read response body");
+        let body = BufferedBody::from_body(&bytes);
+        let response = builder.body(body).expect("Failed to build response");
+        return Some(response);
     }
 }
 

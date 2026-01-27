@@ -57,6 +57,12 @@ pub struct BufferedBody
 }
 
 impl BufferedBody {
+    /// Returns a read-only view of the raw buffered body bytes.
+    /// This is different from `to_bytes`, which serializes with metadata for persistence.
+    pub fn body_bytes(&self) -> &[u8] {
+        self.bufs.as_ref()
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut v = Vec::new();
 
