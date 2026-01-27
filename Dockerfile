@@ -6,7 +6,7 @@ RUN apt-get update && \
 WORKDIR /usr/src/cacheus
 COPY . .
 
-RUN RUSTFLAGS="-C target-feature=+aes" cargo install --path . --verbose
+RUN RUSTFLAGS="-C target-feature=+aes" cargo install --path .
 
 FROM debian:bullseye-slim
 
