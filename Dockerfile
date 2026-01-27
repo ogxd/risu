@@ -1,4 +1,4 @@
-FROM rust:1.84-slim-bullseye as builder
+FROM rust:1.84-slim-bullseye AS builder
 
 RUN apt-get update && \
     apt-get install pkg-config libssl-dev -y
@@ -6,7 +6,7 @@ RUN apt-get update && \
 WORKDIR /usr/src/cacheus
 COPY . .
 
-RUN RUSTFLAGS="-C target-feature=+aes" cargo install --path .
+RUN RUSTFLAGS="-C target-feature=+aes" cargo install --path . --verbose
 
 FROM debian:bullseye-slim
 
