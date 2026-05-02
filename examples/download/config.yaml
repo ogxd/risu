@@ -3,14 +3,14 @@ prometheus_port: 8081
 minimum_log_level: debug
 
 middlewares:
-  - block_request:
-      when:
-        not:
-          path_contains: '*download'
-  - use_cache:
-      cache_name: files
-  - forward_request:
-      target_host: google.com
+  - type: block_request
+    when:
+      not:
+        path_contains: '*download'
+  - type: use_cache
+    cache_name: files
+  - type: forward_request
+    target_host: google.com
 
 caches:
   - in_memory:

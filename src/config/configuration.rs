@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 use serde_inline_default::serde_inline_default;
-use super::{CacheConfig, MiddlewareEnum};
+use super::{CacheConfig, MiddlewareEntry};
 
 /// Main server configuration structure
 #[serde_inline_default]
@@ -17,7 +17,7 @@ pub struct Configuration {
     #[serde_inline_default("info".to_string())]
     pub minimum_log_level: String,
     #[serde(default)]
-    pub middlewares: Vec<MiddlewareEnum>,
+    pub middlewares: Vec<MiddlewareEntry>,
     #[serde(default)]
     pub caches: Vec<CacheConfig>,
 }

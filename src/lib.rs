@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 // pub use caches::*;
 pub use collections::*;
-pub use config::{Configuration, MiddlewareEnum};
+pub use config::{Configuration, MiddlewareEntry, MiddlewareEnum};
 use buffered_body::BufferedBody;
 use executor::TokioExecutor;
 use futures::join;

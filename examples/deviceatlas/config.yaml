@@ -4,19 +4,19 @@ heathcheck_port: 8082
 minimum_log_level: info
 
 middlewares:
-  - log:
-      level: info
-      value: 'Cache status: $cache_status, Forward target: $forward_target'
-  - add_response_header:
-      name: 'X-Cache-Status'
-      value: '$cache_status'
-  - use_cache:
-      cache_name: files
-      when:
-        status_code_is: 200
-  - forward_request:
-      scheme: https
-      target_host: deviceatlas.com
+  - type: log
+    level: info
+    value: 'Cache status: $cache_status, Forward target: $forward_target'
+  - type: add_response_header
+    name: 'X-Cache-Status'
+    value: '$cache_status'
+  - type: use_cache
+    cache_name: files
+    when:
+      status_code_is: 200
+  - type: forward_request
+    scheme: https
+    target_host: deviceatlas.com
 
 caches:
   - hybrid:

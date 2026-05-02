@@ -9,55 +9,83 @@ use reqwest as rw;
 trait Middleware {
     async fn init(&mut self) {}
     async fn on_request(&self, _context: &mut CallContext, _request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> { None }
-    async fn on_response(&self, _context: &mut CallContext, _request: &Request<BufferedBody>, _response: &mut Option<Response<BufferedBody>>) {}
+    async fn on_response(&self, _context: &mut CallContext, _request: &Request<BufferedBody>, _response: &mut Option<Response<BufferedBody>>, _when_applies: bool) {}
+}
+
+/// A middleware as it appears in the YAML config: a typed middleware kind plus
+/// an optional `when:` predicate that gates both the request and response phases.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MiddlewareEntry {
+    #[serde(flatten)]
+    pub kind: MiddlewareEnum,
+    #[serde(default)]
+    pub when: Option<Condition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum MiddlewareEnum {
-    Block { block_request: Block },
-    Cache { use_cache: CacheMiddleware }, // TODO: Support HTTP cache headers, validation, etc.
-    Forward { forward_request: Forward }, // TODO: Support multiple targets, DNS load balancing, redirects, etc.
-    AddHeader { add_response_header: AddHeader }, // TODO: If before forward: add request header, else add response header? Or separate types?
-    ReplaceResponseBody { replace_response_body: ReplaceResponseBody },
-    Log { log: Log },
-    // TODO: RateLimit, Compress, 
+    BlockRequest(Block),
+    UseCache(CacheMiddleware), // TODO: Support HTTP cache headers, validation, etc.
+    ForwardRequest(Forward), // TODO: Support multiple targets, DNS load balancing, redirects, etc.
+    AddResponseHeader(AddHeader),
+    ReplaceResponseBody(ReplaceResponseBody),
+    Log(Log),
+    // TODO: RateLimit, Compress,
+}
+
+impl MiddlewareEntry {
+    pub async fn init(&mut self) {
+        self.kind.init().await
+    }
+
+    pub async fn on_request(&self, context: &mut CallContext, request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
+        debug!("Processing middleware request: {:?}", self.kind);
+        if !self.when.as_ref().is_none_or(|w| w.evaluate(request)) {
+            return None;
+        }
+        self.kind.on_request(context, request).await
+    }
+
+    pub async fn on_response(&self, context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
+        debug!("Processing middleware response: {:?}", self.kind);
+        let when_applies = self.when.as_ref().is_none_or(|w| w.evaluate_with_response(request, response));
+        self.kind.on_response(context, request, response, when_applies).await
+    }
 }
 
 impl MiddlewareEnum {
 
     pub async fn init(&mut self) {
         match self {
-            MiddlewareEnum::Block { block_request } => block_request.init().await,
-            MiddlewareEnum::Cache { use_cache } => use_cache.init().await,
-            MiddlewareEnum::Forward { forward_request } => forward_request.init().await,
-            MiddlewareEnum::AddHeader { add_response_header } => add_response_header.init().await,
-            MiddlewareEnum::ReplaceResponseBody { replace_response_body } => replace_response_body.init().await,
-            MiddlewareEnum::Log { log } => log.init().await,
+            MiddlewareEnum::BlockRequest(m) => m.init().await,
+            MiddlewareEnum::UseCache(m) => m.init().await,
+            MiddlewareEnum::ForwardRequest(m) => m.init().await,
+            MiddlewareEnum::AddResponseHeader(m) => m.init().await,
+            MiddlewareEnum::ReplaceResponseBody(m) => m.init().await,
+            MiddlewareEnum::Log(m) => m.init().await,
         }
     }
 
     pub async fn on_request(&self, context: &mut CallContext, request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
-        debug!("Processing middleware request: {:?}", self);
         match self {
-            MiddlewareEnum::Block { block_request } => block_request.on_request(context, request).await,
-            MiddlewareEnum::Cache { use_cache } => use_cache.on_request(context, request).await,
-            MiddlewareEnum::Forward { forward_request } => forward_request.on_request(context, request).await,
-            MiddlewareEnum::AddHeader { add_response_header } => add_response_header.on_request(context, request).await,
-            MiddlewareEnum::ReplaceResponseBody { replace_response_body } => replace_response_body.on_request(context, request).await,
-            MiddlewareEnum::Log { log } => log.on_request(context, request).await,
+            MiddlewareEnum::BlockRequest(m) => m.on_request(context, request).await,
+            MiddlewareEnum::UseCache(m) => m.on_request(context, request).await,
+            MiddlewareEnum::ForwardRequest(m) => m.on_request(context, request).await,
+            MiddlewareEnum::AddResponseHeader(m) => m.on_request(context, request).await,
+            MiddlewareEnum::ReplaceResponseBody(m) => m.on_request(context, request).await,
+            MiddlewareEnum::Log(m) => m.on_request(context, request).await,
         }
     }
 
-    pub async fn on_response(&self, context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
-        debug!("Processing middleware response: {:?}", self);
+    pub async fn on_response(&self, context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>, when_applies: bool) {
         match self {
-            MiddlewareEnum::Block { block_request } => block_request.on_response(context, request, response).await,
-            MiddlewareEnum::Cache { use_cache } => use_cache.on_response(context, request, response).await,
-            MiddlewareEnum::Forward { forward_request } => forward_request.on_response(context, request, response).await,
-            MiddlewareEnum::AddHeader { add_response_header } => add_response_header.on_response(context, request, response).await,
-            MiddlewareEnum::ReplaceResponseBody { replace_response_body } => replace_response_body.on_response(context, request, response).await,
-            MiddlewareEnum::Log { log } => log.on_response(context, request, response).await,
+            MiddlewareEnum::BlockRequest(m) => m.on_response(context, request, response, when_applies).await,
+            MiddlewareEnum::UseCache(m) => m.on_response(context, request, response, when_applies).await,
+            MiddlewareEnum::ForwardRequest(m) => m.on_response(context, request, response, when_applies).await,
+            MiddlewareEnum::AddResponseHeader(m) => m.on_response(context, request, response, when_applies).await,
+            MiddlewareEnum::ReplaceResponseBody(m) => m.on_response(context, request, response, when_applies).await,
+            MiddlewareEnum::Log(m) => m.on_response(context, request, response, when_applies).await,
         }
     }
 }
@@ -67,15 +95,10 @@ impl MiddlewareEnum {
 pub struct Block {
     #[serde_inline_default(403)]
     pub status_code: u16,
-    #[serde(default)]
-    pub when: Option<Condition>,
 }
 
 impl Middleware for Block {
-    async fn on_request(&self, _context: &mut CallContext, request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate(&request)) {
-            return None;
-        }
+    async fn on_request(&self, _context: &mut CallContext, _request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
         return Some(Response::builder().status(self.status_code).body(BufferedBody::from_body(b"Blocked by cacheus")).unwrap());
     }
 }
@@ -83,8 +106,6 @@ impl Middleware for Block {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CacheMiddleware {
     pub cache_name: String,
-    #[serde(default)]
-    pub when: Option<Condition>,
 }
 
 // - Stale
@@ -96,9 +117,6 @@ pub struct CacheMiddleware {
 // [Cache::on_request] lookup: found -> [Cache::on_response] response + hit context: no insert
 impl Middleware for CacheMiddleware {
     async fn on_request(&self, context: &mut CallContext, request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate(&request)) {
-            return None;
-        }
         if let Some((cache_config, cache_instance)) = context.caches.get(&self.cache_name) {
             let key = cache_config.create_key(&request);
             match cache_instance.get(&key).await {
@@ -143,12 +161,11 @@ impl Middleware for CacheMiddleware {
         return None;
     }
 
-    async fn on_response(&self, context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
-        // Here we have a problem: imagine we only want to cache 200 OK responses, so we add when: status_code_is: 200. 
-        // If the response is 404, we may want to return a stale instead of a miss. But since the when condition fails, we won't even look into the cache.
-        // To handle such case, we handle the stale logic before the when condition.
+    async fn on_response(&self, context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>, when_applies: bool) {
+        // Stale fallback intentionally bypasses `when`: e.g. with `when: status_code_is: 200`,
+        // a 404 from the origin would otherwise skip the cache entirely. We want to substitute
+        // the stale entry first, then re-check `when` for the insert path.
         let has_response = response.is_some();
-        let when_applies = self.when.as_ref().is_none_or(|w| w.evaluate_with_response(&request, &response));
         if (!has_response || !when_applies) && context.stale_response.is_some() {
             context.variables.insert("$cache_status".to_string(), "stale".to_string());
             response.replace(context.stale_response.take().unwrap());
@@ -185,7 +202,6 @@ pub struct Forward {
     /// Default is 3.
     pub max_redirects: u8,
     pub scheme: Option<String>,
-    pub when: Option<Condition>,
     #[serde(skip)]
     pub client: Option<Arc<rw::Client>>,
 }
@@ -199,7 +215,6 @@ impl Default for Forward {
             use_nagle: false,
             max_redirects: 3,
             scheme: None,
-            when: None,
             client: None,
         }
     }
@@ -217,7 +232,7 @@ impl Middleware for Forward {
         }
 
         builder = builder.tcp_nodelay(!self.use_nagle);
-        
+
         // Try to honor HTTP/2 vs HTTP/1 preferences when specified.
         if self.enforce_http2 {
             builder = builder.http2_prior_knowledge();
@@ -234,9 +249,6 @@ impl Middleware for Forward {
     }
 
     async fn on_request(&self, context: &mut CallContext, request: &mut Request<BufferedBody>) -> Option<Response<BufferedBody>> {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate(&request)) {
-            return None;
-        }
         let target_host = match request.headers().get("x-target-host") {
             Some(value) => value.to_str().unwrap().to_string(),
             None => self.target_host.clone(),
@@ -307,14 +319,12 @@ impl Middleware for Forward {
 pub struct AddHeader {
     pub name: String,
     pub value: String,
-    #[serde(default)]
-    pub when: Option<Condition>,
 }
 
 impl Middleware for AddHeader {
 
-    async fn on_response(&self, _context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate_with_response(&request, &response)) {
+    async fn on_response(&self, _context: &mut CallContext, _request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>, when_applies: bool) {
+        if !when_applies {
             return;
         }
         if let Some(response) = response {
@@ -332,14 +342,12 @@ impl Middleware for AddHeader {
 pub struct ReplaceResponseBody {
     pub find: String,
     pub replacement: String,
-    #[serde(default)]
-    pub when: Option<Condition>,
 }
 
 impl Middleware for ReplaceResponseBody {
 
-    async fn on_response(&self, _context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate_with_response(&request, &response)) {
+    async fn on_response(&self, _context: &mut CallContext, _request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>, when_applies: bool) {
+        if !when_applies {
             return;
         }
         if let Some(response) = response {
@@ -358,14 +366,12 @@ impl Middleware for ReplaceResponseBody {
 pub struct Log {
     pub level: String,
     pub value: String,
-    #[serde(default)]
-    pub when: Option<Condition>,
 }
 
 impl Middleware for Log {
 
-    async fn on_response(&self, _context: &mut CallContext, request: &Request<BufferedBody>, response: &mut Option<Response<BufferedBody>>) {
-        if !self.when.as_ref().is_none_or(|w| w.evaluate_with_response(&request, &response)) {
+    async fn on_response(&self, _context: &mut CallContext, _request: &Request<BufferedBody>, _response: &mut Option<Response<BufferedBody>>, when_applies: bool) {
+        if !when_applies {
             return;
         }
         // Replace variables in header value, if any
@@ -396,7 +402,6 @@ mod tests {
         // Create middleware
         let middleware = CacheMiddleware {
             cache_name: "test_cache".to_string(),
-            when: None,
         };
 
         // Create cache
@@ -422,7 +427,7 @@ mod tests {
 
         // Call middleware first, expecting a miss
         let cache_response = middleware.on_request(&mut call_context, &mut request).await;
-        middleware.on_response(&mut call_context, &request, &mut remote_response).await;
+        middleware.on_response(&mut call_context, &request, &mut remote_response, true).await;
 
         assert!(cache_response.is_none());
         assert_eq!(call_context.variables.get("$cache_status"), Some(&"miss".to_string()));
@@ -430,7 +435,7 @@ mod tests {
         // Call middleware second, expecting a hit
         let mut cache_response = middleware.on_request(&mut call_context, &mut request).await;
         assert!(cache_response.is_some());
-        middleware.on_response(&mut call_context, &request, &mut cache_response).await;
+        middleware.on_response(&mut call_context, &request, &mut cache_response, true).await;
 
         assert_eq!(call_context.variables.get("$cache_status"), Some(&"hit".to_string()));
 
@@ -439,7 +444,7 @@ mod tests {
 
         let cache_response = middleware.on_request(&mut call_context, &mut request).await;
         let mut stale_response = None; // Simulate failed fetch
-        middleware.on_response(&mut call_context, &request, &mut stale_response).await;
+        middleware.on_response(&mut call_context, &request, &mut stale_response, true).await;
 
         assert!(cache_response.is_none(), "Expected no response from cache since entry is stale");
         assert!(stale_response.is_some(), "Expected stale response to be returned");
@@ -447,7 +452,7 @@ mod tests {
 
         // Call again, but now the remote call is successful, so we should cache the new response and get a miss
         let cache_response = middleware.on_request(&mut call_context, &mut request).await;
-        middleware.on_response(&mut call_context, &request, &mut remote_response).await;
+        middleware.on_response(&mut call_context, &request, &mut remote_response, true).await;
 
         assert!(cache_response.is_none(), "Expected no response from cache since entry is stale");
         assert_eq!(call_context.variables.get("$cache_status"), Some(&"miss".to_string()));
